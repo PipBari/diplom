@@ -1,67 +1,44 @@
 package ru.backend.service.git;
 
-import org.eclipse.jgit.api.Git;
-import org.eclipse.jgit.api.errors.GitAPIException;
-import org.eclipse.jgit.revwalk.RevCommit;
-import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.springframework.stereotype.Service;
+import ru.backend.rest.git.dto.GitConnectionRequest;
 
-import java.io.File;
-import java.io.IOException;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class GitService {
 
-    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private final List<GitConnectionRequest> repositories = new ArrayList<>();
 
-    public void cloneOrUpdateRepository(String repoUrl, String localPath, String branch, String username, String token) throws GitAPIException, IOException {
-        File repoDir = new File(localPath);
-
-        if (repoDir.exists() && new File(repoDir, ".git").exists()) {
-            try (Git git = Git.open(repoDir)) {
-                git.checkout().setName(branch).call();
-                git.pull()
-                        .setCredentialsProvider(new UsernamePasswordCredentialsProvider(username, token))
-                        .call();
-                System.out.println("Репозиторий обновлен (git pull) на ветке: " + branch);
-            }
-        } else {
-            Git.cloneRepository()
-                    .setURI(repoUrl)
-                    .setDirectory(repoDir)
-                    .setBranch(branch)
-                    .setCredentialsProvider(new UsernamePasswordCredentialsProvider(username, token))
-                    .call();
-            System.out.println("Репозиторий клонирован на ветке: " + branch);
-        }
+    public void save(GitConnectionRequest request) {
+        repositories.add(request);
     }
 
-    public List<String> getCommitHistory(String localPath, int limit) throws GitAPIException, IOException {
-        File repoDir = new File(localPath);
-        if (!repoDir.exists() || !new File(repoDir, ".git").exists()) {
-            throw new IOException("Репозиторий не найден по пути: " + localPath);
-        }
-
-        List<String> commits = new ArrayList<>();
-
-        try (Git git = Git.open(repoDir)) {
-            Iterable<RevCommit> log = git.log().setMaxCount(limit).call();
-            for (RevCommit commit : log) {
-                String message = commit.getShortMessage();
-                String author = commit.getAuthorIdent().getName();
-                String timestamp = DATE_FORMAT.format(new Date(commit.getCommitTime() * 1000L));
-                commits.add(message + " (" + author + ", " + timestamp + ")");
-            }
-        }
-        return commits;
+    public List<GitConnectionRequest> getAll() {
+        return repositories;
     }
 
-    public String getLastCommit(String localPath) throws GitAPIException, IOException {
-        List<String> commits = getCommitHistory(localPath, 1);
-        return commits.isEmpty() ? "Нет коммитов" : commits.get(0);
+    public Optional<GitConnectionRequest> getByName(String name) {
+        return repositories.stream()
+                .filter(r -> r.getName().equalsIgnoreCase(name))
+                .findFirst();
+    }
+
+    public void delete(String name) {
+        repositories.removeIf(r -> r.getName().equalsIgnoreCase(name));
+    }
+
+    public void updateStatus(String name, String newStatus) {
+        getByName(name).ifPresent(r -> r.setStatus(newStatus));
+    }
+
+    public boolean isConfigured() {
+        return !repositories.isEmpty();
+    }
+
+    public void clearAll() {
+        repositories.clear();
     }
 }
