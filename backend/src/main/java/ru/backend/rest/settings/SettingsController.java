@@ -1,4 +1,4 @@
-package ru.backend.rest.git;
+package ru.backend.rest.settings;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

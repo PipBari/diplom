@@ -1,43 +1,55 @@
 <template>
   <div class="settings-view">
     <h2>Настройки</h2>
-
     <div class="card-list">
-      <button @click="goToGit">Git Репозитории</button>
+      <div class="card" @click="goToGit">
+        <div class="card-title">Репозитории</div>
+        <div class="card-description">Настройка подключенных репозиториев</div>
+      </div>
+      <div class="card" @click="goToProjects">
+        <div class="card-title">Проекты</div>
+        <div class="card-description">Настройка проектов</div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
 import { useRouter } from 'vue-router'
-
 const router = useRouter()
-
 const goToGit = () => router.push('/settings/git')
-// const goToCI = () => router.push('/settings/ci')
+const goToProjects = () => router.push('/settings/projects')
 </script>
 
 <style scoped>
 .settings-view {
-  max-width: 600px;
+  max-width: 800px;
+  margin: auto;
 }
 .card-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-top: 20px;
+  gap: 16px;
+  margin-top: 30px;
 }
-button {
-  padding: 10px 16px;
-  font-size: 1rem;
+.card {
+  padding: 20px;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   cursor: pointer;
-  border: none;
-  border-radius: 6px;
-  background-color: #3f7cff;
-  color: white;
-  transition: 0.2s;
+  border-left: 4px solid #3f7cff;
 }
-button:hover {
-  background-color: #2f60d1;
+.card:hover {
+  background: #f9f9f9;
+}
+.card-title {
+  font-weight: bold;
+  color: #007bff;
+}
+.card-description {
+  color: #555;
+  font-size: 0.95rem;
+  margin-top: 4px;
 }
 </style>

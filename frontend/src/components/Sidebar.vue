@@ -1,16 +1,16 @@
 <template>
   <aside class="sidebar">
-    <h2>CONFIGS EDITOR</h2>
+    <h2>РЕДАКТОР КОНФИГУРАЦИЙ</h2>
 
     <router-link
         to="/applications"
         :class="{ active: isActive('/applications') }"
-    >📂 Applications</router-link>
+    >Приложение</router-link>
 
     <router-link
         to="/settings"
         :class="{ active: isActive('/settings') }"
-    >⚙️ Git Settings</router-link>
+    >Настройки</router-link>
   </aside>
 </template>
 

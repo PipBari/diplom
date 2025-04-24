@@ -5,7 +5,7 @@ import lombok.*;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class GitConnectionRequest {
+public class GitConnectionRequestDto {
     private String name;
     private String repoUrl;
     private String branch;

@@ -1,44 +1,67 @@
 package ru.backend.service.git;
 
+import lombok.extern.slf4j.Slf4j;
+import org.eclipse.jgit.api.CloneCommand;
+import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.springframework.stereotype.Service;
-import ru.backend.rest.git.dto.GitConnectionRequest;
+import ru.backend.rest.git.dto.GitConnectionRequestDto;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.nio.file.Files;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 @Service
 public class GitService {
 
-    private final List<GitConnectionRequest> repositories = new ArrayList<>();
+    private final Map<String, GitConnectionRequestDto> repoStorage = new ConcurrentHashMap<>();
 
-    public void save(GitConnectionRequest request) {
-        repositories.add(request);
+    public List<GitConnectionRequestDto> getAll() {
+        return new ArrayList<>(repoStorage.values());
     }
 
-    public List<GitConnectionRequest> getAll() {
-        return repositories;
-    }
-
-    public Optional<GitConnectionRequest> getByName(String name) {
-        return repositories.stream()
-                .filter(r -> r.getName().equalsIgnoreCase(name))
-                .findFirst();
+    public void save(GitConnectionRequestDto request) {
+        String status = checkConnection(request);
+        request.setStatus(status);
+        if (request.getType() == null || request.getType().isBlank()) {
+            request.setType("git");
+        }
+        repoStorage.put(request.getName(), request);
     }
 
     public void delete(String name) {
-        repositories.removeIf(r -> r.getName().equalsIgnoreCase(name));
+        repoStorage.remove(name);
     }
 
-    public void updateStatus(String name, String newStatus) {
-        getByName(name).ifPresent(r -> r.setStatus(newStatus));
+    public String recheckStatus(String name) {
+        GitConnectionRequestDto repo = repoStorage.get(name);
+        if (repo == null) {
+            return "Unknown";
+        }
+        String status = checkConnection(repo);
+        repo.setStatus(status);
+        return status;
     }
 
-    public boolean isConfigured() {
-        return !repositories.isEmpty();
-    }
-
-    public void clearAll() {
-        repositories.clear();
+    private String checkConnection(GitConnectionRequestDto request) {
+        try {
+            var tempDir = Files.createTempDirectory("git-check").toFile();
+            CloneCommand cloneCommand = Git.cloneRepository()
+                    .setURI(request.getRepoUrl())
+                    .setBranch(request.getBranch())
+                    .setDirectory(tempDir)
+                    .setCredentialsProvider(new UsernamePasswordCredentialsProvider(
+                            request.getUsername(),
+                            request.getToken()
+                    ))
+                    .setCloneAllBranches(false)
+                    .setNoCheckout(true);
+            try (Git ignored = cloneCommand.call()) {
+                return "Successful";
+            }
+        } catch (Exception e) {
+            return "Error";
+        }
     }
 }

@@ -1,16 +1,14 @@
 <template>
   <div>
-    <h2>📂 Приложения</h2>
+    <h2>Приложения</h2>
 
-    <!-- Форма создания приложения -->
     <ApplicationForm @submit="addApp" />
 
-    <!-- Список карточек приложений -->
     <AppCard
         v-for="app in applications"
         :key="app.name"
         :title="app.name"
-        :status="'🟢 Synced'"
+        :status="'Synced'"
     >
       <p>Path: {{ app.path }}</p>
       <p>Created at: {{ app.createdAt }}</p>

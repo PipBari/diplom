@@ -1,12 +1,51 @@
 <template>
   <div class="git-settings">
-    <h2>🧬 Git Репозитории</h2>
+    <div class="breadcrumbs">Настройки / Репозитории</div>
 
-    <button class="add-btn" @click="showForm = true">➕ Добавить репозиторий</button>
+    <div class="top-bar">
+      <button @click="showForm = true">Подключить репозиторий</button>
+      <button @click="loadRepos">Обновить список</button>
+    </div>
+
+    <div class="table-header">
+      <div>ТИП</div>
+      <div>ИМЯ</div>
+      <div>ВЕТКА</div>
+      <div>РЕПОЗИТОРИЙ</div>
+      <div>СТАТУС ПОДКЛЮЧЕНИЯ</div>
+      <div></div>
+    </div>
+
+    <div v-if="repos.length">
+      <div v-for="repo in repos" :key="repo.name" class="repo-row">
+        <div class="cell">{{ repo.type }}</div>
+        <div class="cell">{{ repo.name || 'по умолчанию' }}</div>
+        <div class="cell">{{ repo.branch }}</div>
+        <div class="cell">
+          <a :href="repo.repoUrl" target="_blank">{{ repo.repoUrl }}</a>
+        </div>
+        <div class="cell">
+          <span :class="['status', statusClass(repo.status)]">{{ repo.status }}</span>
+        </div>
+        <div class="cell actions">
+          <div class="dropdown">
+            <button class="menu-btn" @click="toggleDropdown(repo.name)">⋮</button>
+            <div class="menu" v-if="openedMenu === repo.name">
+              <div class="menu-item" @click="recheckRepoStatus(repo.name)">Проверить</div>
+              <div class="menu-item" @click="removeRepo(repo.name)">Удалить</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-else class="empty-row">Нет подключённых репозиториев</div>
 
     <div v-if="showForm" class="side-panel">
+      <div class="side-panel-header">
+        <span>Добавить репозиторий</span>
+        <button class="close-btn" @click="showForm = false">×</button>
+      </div>
       <div class="side-panel-content">
-        <h3>Добавить репозиторий</h3>
         <form @submit.prevent="addRepo">
           <label>Имя:</label>
           <input v-model="form.name" required />
@@ -24,29 +63,20 @@
           <input v-model="form.token" type="password" required />
 
           <div class="form-actions">
-            <button type="submit">✅ Сохранить</button>
-            <button type="button" @click="showForm = false">✖ Отмена</button>
+            <button type="submit">Сохранить</button>
+            <button type="button" @click="showForm = false">Отмена</button>
           </div>
         </form>
       </div>
     </div>
-
-    <p v-if="message" class="success-msg">{{ message }}</p>
-
-    <ul v-if="repos.length">
-      <li v-for="repo in repos" :key="repo.name">
-        <strong>{{ repo.name }}</strong> — {{ repo.repoUrl }} (ветка: {{ repo.branch }}) —
-        <span :class="statusClass(repo.status)">{{ repo.status }}</span>
-        <button @click="removeRepo(repo.name)">🗑️</button>
-      </li>
-    </ul>
-    <p v-else>Нет добавленных репозиториев.</p>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+
+import '../../assets/styles/git/GitConnectStyle.css'
 
 const form = ref({
   name: '',
@@ -57,133 +87,65 @@ const form = ref({
 })
 
 const repos = ref([])
-const message = ref('')
 const showForm = ref(false)
+const openedMenu = ref(null)
 
 const loadRepos = async () => {
   try {
-    const response = await axios.get('http://localhost:8080/settings/git')
-    repos.value = response.data
-  } catch (e) {
-    console.error('Ошибка при загрузке репозиториев', e)
+    const res = await axios.get('http://localhost:8080/settings/git')
+    repos.value = res.data
+  } catch (err) {
+    console.error('Ошибка загрузки', err)
   }
 }
 
 const addRepo = async () => {
   try {
     await axios.post('http://localhost:8080/settings/git', form.value)
-    message.value = '✅ Репозиторий добавлен'
-    form.value = { name: '', repoUrl: '', branch: '', username: '', token: '' }
     showForm.value = false
     await loadRepos()
   } catch (e) {
-    message.value = '❌ Ошибка при добавлении'
+    console.error('Ошибка добавления', e)
   }
 }
 
 const removeRepo = async (name) => {
   try {
     await axios.delete(`http://localhost:8080/settings/git/${name}`)
+    openedMenu.value = null
     await loadRepos()
   } catch (e) {
-    console.error('Ошибка при удалении', e)
+    console.error('Ошибка удаления', e)
+  }
+}
+
+const recheckRepoStatus = async (name) => {
+  try {
+    await axios.post(`http://localhost:8080/settings/git/${name}/status`)
+    openedMenu.value = null
+    await loadRepos()
+  } catch (e) {
+    console.error('Ошибка обновления статуса', e)
   }
 }
 
 const statusClass = (status) => {
-  if (status === 'Successful') return 'status-ok'
-  if (status === 'Error') return 'status-error'
-  return 'status-unknown'
+  if (status === 'Successful') return 'ok'
+  if (status === 'Error') return 'fail'
+  return 'unknown'
 }
 
-onMounted(loadRepos)
+const toggleDropdown = (name) => {
+  openedMenu.value = openedMenu.value === name ? null : name
+}
+
+onMounted(() => {
+  loadRepos()
+
+  window.addEventListener('click', (e) => {
+    if (!e.target.closest('.dropdown')) {
+      openedMenu.value = null
+    }
+  })
+})
 </script>
-
-<style scoped>
-.git-settings {
-  position: relative;
-  max-width: 800px;
-  padding-right: 340px;
-}
-
-h2 {
-  margin-bottom: 0.5rem;
-}
-
-.add-btn {
-  background-color: #3f7cff;
-  color: white;
-  border: none;
-  padding: 6px 12px;
-  font-size: 0.95rem;
-  border-radius: 6px;
-  cursor: pointer;
-  margin-bottom: 1.5rem;
-  display: inline-block;
-}
-
-.side-panel {
-  position: fixed;
-  top: 0;
-  right: 0;
-  width: 320px;
-  height: 100vh;
-  background-color: #fefefe;
-  border-left: 1px solid #ddd;
-  box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
-  padding: 1.5rem;
-  z-index: 1000;
-}
-
-.side-panel-content h3 {
-  margin-bottom: 1rem;
-}
-
-.side-panel-content input {
-  display: block;
-  width: 100%;
-  margin-bottom: 10px;
-  padding: 6px;
-  font-size: 0.95rem;
-}
-
-.form-actions {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 1rem;
-}
-
-button {
-  padding: 6px 10px;
-  font-size: 0.9rem;
-  cursor: pointer;
-}
-
-.success-msg {
-  margin-top: 1rem;
-  color: green;
-}
-
-ul {
-  list-style: none;
-  padding: 0;
-  margin-top: 1rem;
-}
-
-li {
-  margin: 0.5rem 0;
-  padding: 0.5rem;
-  background-color: #f3f3f3;
-  border-radius: 4px;
-}
-
-.status-ok {
-  color: green;
-}
-.status-error {
-  color: red;
-}
-.status-unknown {
-  color: gray;
-}
-</style>

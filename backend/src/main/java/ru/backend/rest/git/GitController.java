@@ -2,7 +2,7 @@ package ru.backend.rest.git;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import ru.backend.rest.git.dto.GitConnectionRequest;
+import ru.backend.rest.git.dto.GitConnectionRequestDto;
 import ru.backend.service.git.GitService;
 
 import java.util.List;
@@ -18,12 +18,12 @@ public class GitController {
     }
 
     @GetMapping
-    public ResponseEntity<List<GitConnectionRequest>> getAll() {
+    public ResponseEntity<List<GitConnectionRequestDto>> getAll() {
         return ResponseEntity.ok(gitService.getAll());
     }
 
     @PostMapping
-    public ResponseEntity<String> add(@RequestBody GitConnectionRequest request) {
+    public ResponseEntity<String> add(@RequestBody GitConnectionRequestDto request) {
         gitService.save(request);
         return ResponseEntity.ok("Репозиторий добавлен");
     }
@@ -35,8 +35,8 @@ public class GitController {
     }
 
     @PostMapping("/{name}/status")
-    public ResponseEntity<String> updateStatus(@PathVariable String name, @RequestBody String status) {
-        gitService.updateStatus(name, status);
-        return ResponseEntity.ok("Статус обновлён");
+    public ResponseEntity<String> recheckStatus(@PathVariable String name) {
+        String updatedStatus = gitService.recheckStatus(name);
+        return ResponseEntity.ok("Статус обновлён: " + updatedStatus);
     }
 }
