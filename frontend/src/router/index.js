@@ -5,6 +5,7 @@ import SettingsView from '../views/settings/SettingsView.vue'
 
 import GitSettingsView from '../views/git/GitSettingsView.vue'
 import ProjectSettingsView from '../views/settings/ProjectSettingsView.vue'
+import ServersSettingsView from '../views/settings/ServersSettingsView.vue'
 
 const routes = [
     { path: '/', redirect: '/applications' },
@@ -12,6 +13,7 @@ const routes = [
     { path: '/settings', component: SettingsView },
     { path: '/settings/git', component: GitSettingsView },
     { path: '/settings/projects', component: ProjectSettingsView },
+    { path: '/settings/servers', component: ServersSettingsView }
 ]
 
 const router = createRouter({

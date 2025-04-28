@@ -6,6 +6,10 @@
         <div class="card-title">Репозитории</div>
         <div class="card-description">Настройка подключенных репозиториев</div>
       </div>
+      <div class="card" @click="goToServers">
+        <div class="card-title">Серверы</div>
+        <div class="card-description">Настройка подключенных серверов</div>
+      </div>
       <div class="card" @click="goToProjects">
         <div class="card-title">Проекты</div>
         <div class="card-description">Настройка проектов</div>
@@ -19,6 +23,7 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 const goToGit = () => router.push('/settings/git')
 const goToProjects = () => router.push('/settings/projects')
+const goToServers = () => router.push('/settings/servers')
 </script>
 
 <style scoped>
