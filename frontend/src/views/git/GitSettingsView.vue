@@ -74,7 +74,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+import api from '@/api/axios'
 
 import '../../assets/styles/git/GitConnectStyle.css'
 
@@ -92,7 +92,7 @@ const openedMenu = ref(null)
 
 const loadRepos = async () => {
   try {
-    const res = await axios.get('http://localhost:8080/settings/git')
+    const res = await api.get('/settings/git')
     repos.value = res.data
   } catch (err) {
     console.error('Ошибка загрузки', err)
@@ -101,7 +101,7 @@ const loadRepos = async () => {
 
 const addRepo = async () => {
   try {
-    await axios.post('http://localhost:8080/settings/git', form.value)
+    await api.post('/settings/git', form.value)
     showForm.value = false
     await loadRepos()
   } catch (e) {
@@ -111,7 +111,7 @@ const addRepo = async () => {
 
 const removeRepo = async (name) => {
   try {
-    await axios.delete(`http://localhost:8080/settings/git/${name}`)
+    await api.delete(`/settings/git/${name}`)
     openedMenu.value = null
     await loadRepos()
   } catch (e) {
@@ -121,7 +121,7 @@ const removeRepo = async (name) => {
 
 const recheckRepoStatus = async (name) => {
   try {
-    await axios.post(`http://localhost:8080/settings/git/${name}/status`)
+    await api.post(`/settings/git/${name}/status`)
     openedMenu.value = null
     await loadRepos()
   } catch (e) {

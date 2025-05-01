@@ -72,8 +72,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import axios from 'axios'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
+import api from '@/api/axios'
 import '../../assets/styles/settings/ServersSettings.css'
 
 const form = ref({
@@ -87,10 +87,11 @@ const form = ref({
 const servers = ref([])
 const showForm = ref(false)
 const openedMenu = ref(null)
+let interval = null
 
 const loadServers = async () => {
   try {
-    const res = await axios.get('http://localhost:8080/settings/servers')
+    const res = await api.get('/settings/servers')
     servers.value = res.data
   } catch (err) {
     console.error('Ошибка загрузки серверов', err)
@@ -99,7 +100,7 @@ const loadServers = async () => {
 
 const addServer = async () => {
   try {
-    await axios.post('http://localhost:8080/settings/servers', form.value)
+    await api.post('/settings/servers', form.value)
     showForm.value = false
     await loadServers()
   } catch (e) {
@@ -109,7 +110,7 @@ const addServer = async () => {
 
 const removeServer = async (name) => {
   try {
-    await axios.delete(`http://localhost:8080/settings/servers/${name}`)
+    await api.delete(`/settings/servers/${name}`)
     openedMenu.value = null
     await loadServers()
   } catch (e) {
@@ -119,7 +120,7 @@ const removeServer = async (name) => {
 
 const updateLoad = async (name) => {
   try {
-    await axios.post(`http://localhost:8080/settings/servers/${name}/update-load`)
+    await api.post(`/settings/servers/${name}/update-load`)
     await loadServers()
   } catch (e) {
     console.error('Ошибка обновления нагрузки', e)
@@ -128,7 +129,7 @@ const updateLoad = async (name) => {
 
 const recheckStatus = async (name) => {
   try {
-    await axios.post(`http://localhost:8080/settings/servers/${name}/status`)
+    await api.post(`/settings/servers/${name}/status`)
     await loadServers()
   } catch (e) {
     console.error('Ошибка обновления статуса сервера', e)
@@ -138,12 +139,12 @@ const recheckStatus = async (name) => {
 const statusClass = (status) => {
   switch (status) {
     case 'Successful':
-      return 'status-success';
+      return 'status-success'
     case 'Error':
-      return 'status-error';
+      return 'status-error'
     case 'Unknown':
     default:
-      return 'status-unknown';
+      return 'status-unknown'
   }
 }
 
@@ -157,10 +158,16 @@ const closeForm = () => {
 
 onMounted(() => {
   loadServers()
+  interval = setInterval(loadServers, 60000)
+
   window.addEventListener('click', (e) => {
     if (!e.target.closest('.dropdown')) {
       openedMenu.value = null
     }
   })
+})
+
+onBeforeUnmount(() => {
+  clearInterval(interval)
 })
 </script>

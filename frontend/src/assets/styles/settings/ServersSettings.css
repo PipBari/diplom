@@ -36,7 +36,7 @@
 /* Сетка: ИМЯ - ХОСТ - RAM - CPU - ⋮ */
 .server-settings .table-header {
     display: grid;
-    grid-template-columns: 2fr 2fr 1fr 1fr 1fr auto;
+    grid-template-columns: 1fr 1.5fr 1fr 1fr 1.5fr 0.5fr;
     background-color: #e4ebf5;
     color: #4b4b4b;
     font-weight: 600;
@@ -48,7 +48,7 @@
 
 .server-settings .repo-row {
     display: grid;
-    grid-template-columns: 2fr 2fr 1fr 1fr 1fr auto;
+    grid-template-columns: 1fr 1.5fr 1fr 1fr 1.5fr 0.5fr;
     align-items: center;
     background-color: #ffffff;
     margin-top: 4px;

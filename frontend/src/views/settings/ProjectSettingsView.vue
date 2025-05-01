@@ -53,7 +53,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+import api from '@/api/axios'
 import '../../assets/styles/settings/ProjectSettings.css'
 
 const form = ref({
@@ -67,7 +67,7 @@ const openedMenu = ref(null)
 
 const loadProjects = async () => {
   try {
-    const res = await axios.get('http://localhost:8080/settings/projects')
+    const res = await api.get('/settings/projects')
     projects.value = res.data
   } catch (err) {
     console.error('Ошибка загрузки', err)
@@ -76,7 +76,7 @@ const loadProjects = async () => {
 
 const addProject = async () => {
   try {
-    await axios.post('http://localhost:8080/settings/projects', form.value)
+    await api.post('/settings/projects', form.value)
     showForm.value = false
     await loadProjects()
   } catch (e) {
@@ -86,7 +86,7 @@ const addProject = async () => {
 
 const removeProject = async (name) => {
   try {
-    await axios.delete(`http://localhost:8080/settings/projects/${name}`)
+    await api.delete(`/settings/projects/${name}`)
     openedMenu.value = null
     await loadProjects()
   } catch (e) {

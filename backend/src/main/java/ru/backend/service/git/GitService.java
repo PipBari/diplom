@@ -64,4 +64,12 @@ public class GitService {
             return "Error";
         }
     }
+
+    public GitConnectionRequestDto getByName(String name) {
+        GitConnectionRequestDto repo = repoStorage.get(name);
+        if (repo == null) {
+            throw new NoSuchElementException("Репозиторий не найден: " + name);
+        }
+        return repo;
+    }
 }

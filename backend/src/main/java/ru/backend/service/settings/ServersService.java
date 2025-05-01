@@ -6,11 +6,9 @@ import org.springframework.stereotype.Service;
 import ru.backend.rest.settings.dto.ServersDto;
 
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Scanner;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Scanner;
 
 @Slf4j
 @Service
@@ -32,6 +30,44 @@ public class ServersService {
         serverStorage.remove(name);
     }
 
+    public String recheckStatus(String name) {
+        ServersDto server = serverStorage.get(name);
+        if (server == null) return "Unknown";
+
+        String status = checkConnection(server);
+        server.setStatus(status);
+        return status;
+    }
+
+    public void updateServerLoad(String name) {
+        ServersDto server = serverStorage.get(name);
+        if (server == null || !"Successful".equals(server.getStatus())) return;
+
+        try {
+            JSch jsch = new JSch();
+            Session session = jsch.getSession(server.getSpecify_username(), server.getHost(), server.getPort());
+            session.setPassword(server.getPassword());
+
+            java.util.Properties config = new java.util.Properties();
+            config.put("StrictHostKeyChecking", "no");
+            session.setConfig(config);
+
+            session.connect(10000);
+
+            String cpuLoad = executeCommand(session, "top -bn1 | grep \"%Cpu\" | awk '{print $2+$4}'");
+            server.setCPU(cpuLoad.trim() + "%");
+
+            String memoryInfo = executeCommand(session, "free -m | grep Mem");
+            server.setRAM(parseMemory(memoryInfo));
+
+            session.disconnect();
+        } catch (Exception e) {
+            server.setCPU("-");
+            server.setRAM("-");
+            log.error("Ошибка при обновлении нагрузки сервера '{}': {}", server.getName(), e.getMessage());
+        }
+    }
+
     private String checkConnection(ServersDto server) {
         try {
             JSch jsch = new JSch();
@@ -51,57 +87,20 @@ public class ServersService {
         }
     }
 
-    public String recheckStatus(String name) {
-        ServersDto server = serverStorage.get(name);
-        if (server == null) {
-            return "Unknown";
-        }
-        String status = checkConnection(server);
-        server.setStatus(status);
-        return status;
-    }
-
-    public void updateServerLoad(String name) {
-        ServersDto server = serverStorage.get(name);
-        if (server != null) {
-            try {
-                JSch jsch = new JSch();
-                Session session = jsch.getSession(server.getSpecify_username(), server.getHost(), server.getPort());
-                session.setPassword(server.getPassword());
-
-                java.util.Properties config = new java.util.Properties();
-                config.put("StrictHostKeyChecking", "no");
-                session.setConfig(config);
-
-                session.connect(30000);
-
-                String cpuLoad = executeCommand(session, "top -bn1 | grep \"%Cpu\" | awk '{print $2+$4}'");
-                server.setCPU(cpuLoad.trim() + "%");
-
-                String memoryInfo = executeCommand(session, "free -m | grep Mem");
-                server.setRAM(parseMemory(memoryInfo));
-
-                session.disconnect();
-            } catch (Exception e) {
-                log.error("Ошибка при обновлении нагрузки сервера '{}': {}", server.getName(), e.getMessage());
-            }
-        }
-    }
-
     private String executeCommand(Session session, String command) throws Exception {
-        ChannelExec channelExec = (ChannelExec) session.openChannel("exec");
-        channelExec.setCommand(command);
+        ChannelExec channel = (ChannelExec) session.openChannel("exec");
+        channel.setCommand(command);
+        channel.setInputStream(null);
 
-        channelExec.setInputStream(null);
-        InputStream in = channelExec.getInputStream();
-        channelExec.connect();
+        InputStream in = channel.getInputStream();
+        channel.connect();
 
         String result;
         try (Scanner scanner = new Scanner(in).useDelimiter("\\A")) {
             result = scanner.hasNext() ? scanner.next() : "";
         }
 
-        channelExec.disconnect();
+        channel.disconnect();
         return result;
     }
 

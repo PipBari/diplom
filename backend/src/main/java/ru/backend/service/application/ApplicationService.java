@@ -7,22 +7,38 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class ApplicationService {
 
-    private final List<ApplicationDto> applications = new ArrayList<>();
-
-    public void addApplication(String name, String path) {
-        String createdAt = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        applications.add(new ApplicationDto(name, path, createdAt));
-    }
+    private final Map<String, ApplicationDto> applicationStorage = new ConcurrentHashMap<>();
 
     public List<ApplicationDto> getAll() {
-        return applications;
+        return new ArrayList<>(applicationStorage.values());
     }
 
-    public void clearAll() {
-        applications.clear();
+    public void save(ApplicationDto app) {
+        if (app.getCreatedAt() == null || app.getCreatedAt().isBlank()) {
+            String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            app.setCreatedAt(now);
+        }
+        if (app.getStatus() == null) {
+            app.setStatus("Not Synced");
+        }
+        applicationStorage.put(app.getName(), app);
+    }
+
+    public void delete(String name) {
+        applicationStorage.remove(name);
+    }
+
+    public String recheckStatus(String name) {
+        ApplicationDto app = applicationStorage.get(name);
+        if (app == null) return "Unknown";
+        app.setStatus("Checked");
+        return "Checked";
     }
 }
+
