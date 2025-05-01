@@ -29,16 +29,42 @@ import { ref, onMounted } from 'vue'
 import api from '@/api/axios'
 import AppCard from './AppCard.vue'
 import ApplicationModal from './ApplicationModal.vue'
+import SockJS from 'sockjs-client'
+import { Client } from '@stomp/stompjs'
 
 const applications = ref([])
 const showModal = ref(false)
+let stompClient = null
 
 const loadApps = async () => {
   const res = await api.get('/applications')
   applications.value = res.data
 }
 
-onMounted(loadApps)
+const connectWebSocket = () => {
+  const wsUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080') + '/ws-status'
+
+  stompClient = new Client({
+    webSocketFactory: () => new SockJS(wsUrl),
+    reconnectDelay: 5000,
+    onConnect: () => {
+      stompClient.subscribe('/topic/status', (msg) => {
+        const updated = JSON.parse(msg.body)
+        const index = applications.value.findIndex(a => a.name === updated.name)
+        if (index !== -1) {
+          applications.value[index].status = updated.status
+        }
+      })
+    }
+  })
+
+  stompClient.activate()
+}
+
+onMounted(async () => {
+  await loadApps()
+  connectWebSocket()
+})
 
 const addApp = async (app) => {
   await api.post('/applications', app)
@@ -46,12 +72,13 @@ const addApp = async (app) => {
   showModal.value = false
 }
 
-const syncApp = (name) => {
-  alert(`Синхронизация ${name} пока не реализована`)
+const syncApp = async (name) => {
+  await api.post(`/applications/${name}/status`)
 }
 
-const deleteApp = (name) => {
-  applications.value = applications.value.filter(a => a.name !== name)
+const deleteApp = async (name) => {
+  await api.delete(`/applications/${name}`)
+  await loadApps()
 }
 </script>
 

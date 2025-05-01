@@ -13,7 +13,9 @@
     <div class="card-body">
       <p><b>Проект:</b> {{ app.projectName || '—' }}</p>
       <p><b>Состояние:</b>
-        <span :class="['status', statusClass]">{{ app.status || 'Not Synced' }}</span>
+        <span :class="['status', statusClass]">
+      {{ statusText }}
+</span>
       </p>
 
       <p class="truncate-url">
@@ -50,6 +52,16 @@ const goToDetails = () => {
   router.push(`/applications/${props.app.name}`)
 }
 
+const statusText = computed(() => {
+  switch (props.app.status) {
+    case 'Synced': return 'Синхронизировано'
+    case 'Out of Sync': return 'Есть изменения'
+    case 'Error': return 'Ошибка'
+    case 'Not Synced': return 'Не синхронизировано'
+    default: return props.app.status
+  }
+})
+
 onMounted(async () => {
   const res = await api.get('/settings/git')
   repos.value = res.data
@@ -63,6 +75,7 @@ const getRepoUrl = (repoName) => {
 const statusClass = computed(() => {
   if (props.app.status === 'Successful' || props.app.status === 'Synced') return 'ok'
   if (props.app.status === 'Error') return 'fail'
+  if (props.app.status === 'Out of Sync') return 'warn'
   return 'unknown'
 })
 
@@ -123,15 +136,15 @@ window.addEventListener('click', (e) => {
 }
 .status.ok {
   background: #d4edda;
-  color: #155724;
+  color: green;
 }
 .status.fail {
   background: #f8d7da;
-  color: #721c24;
+  color: red;
 }
 .status.unknown {
   background: #e2e3e5;
-  color: #383d41;
+  color: grey;
 }
 .dropdown {
   position: relative;
@@ -158,5 +171,10 @@ window.addEventListener('click', (e) => {
 }
 .menu-item:hover {
   background: #f0f0f0;
+}
+
+.status.warn {
+  background: #fff3cd;
+  color: #856404;
 }
 </style>
