@@ -1,10 +1,16 @@
 package ru.backend.service.settings;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jcraft.jsch.*;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import ru.backend.rest.settings.dto.ServersDto;
 
+import java.io.File;
 import java.io.InputStream;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -15,6 +21,46 @@ import java.util.Scanner;
 public class ServersService {
 
     private final Map<String, ServersDto> serverStorage = new ConcurrentHashMap<>();
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final File storageFile;
+
+    public ServersService(@Value("${storage.base-dir}") String baseDirPath) {
+        File baseDir = new File(resolvePath(baseDirPath));
+        if (!baseDir.exists()) {
+            baseDir.mkdirs();
+        }
+        this.storageFile = new File(baseDir, "servers.json");
+    }
+
+    private String resolvePath(String path) {
+        return path.replace("${user.home}", System.getProperty("user.home"));
+    }
+
+    @PostConstruct
+    public void loadFromDisk() {
+        try {
+            if (storageFile.exists()) {
+                List<ServersDto> list = objectMapper.readValue(storageFile, new TypeReference<>() {});
+                for (ServersDto dto : list) {
+                    serverStorage.put(dto.getName(), dto);
+                }
+                log.info("Загружено {} серверов из файла", serverStorage.size());
+            }
+        } catch (Exception e) {
+            log.error("Ошибка при загрузке серверов: ", e);
+        }
+    }
+
+    @PreDestroy
+    public void saveToDisk() {
+        try {
+            List<ServersDto> list = new ArrayList<>(serverStorage.values());
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(storageFile, list);
+            log.info("Сохранено {} серверов в файл", list.size());
+        } catch (Exception e) {
+            log.error("Ошибка при сохранении серверов: ", e);
+        }
+    }
 
     public List<ServersDto> getAll() {
         return new ArrayList<>(serverStorage.values());
@@ -24,10 +70,12 @@ public class ServersService {
         server.setStatus(checkConnection(server));
         serverStorage.put(server.getName(), server);
         updateServerLoad(server.getName());
+        saveToDisk();
     }
 
     public void delete(String name) {
         serverStorage.remove(name);
+        saveToDisk();
     }
 
     public String recheckStatus(String name) {
@@ -36,6 +84,7 @@ public class ServersService {
 
         String status = checkConnection(server);
         server.setStatus(status);
+        saveToDisk();
         return status;
     }
 
@@ -61,6 +110,8 @@ public class ServersService {
             server.setRAM(parseMemory(memoryInfo));
 
             session.disconnect();
+
+            saveToDisk();
         } catch (Exception e) {
             server.setCPU("-");
             server.setRAM("-");

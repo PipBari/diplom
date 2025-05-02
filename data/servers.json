@@ -1,0 +1,10 @@
+[ {
+  "name" : "test",
+  "host" : "89.179.242.33",
+  "specify_username" : "ubuntu",
+  "port" : 22,
+  "password" : "WiGtF2BE!",
+  "status" : "Successful",
+  "cpu" : "4.4%",
+  "ram" : "1244 МБ / 19994 МБ"
+} ]

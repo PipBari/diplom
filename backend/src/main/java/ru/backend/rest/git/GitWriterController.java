@@ -7,8 +7,11 @@ import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import ru.backend.rest.git.dto.*;
+import ru.backend.rest.validation.dto.ValidationRequestDto;
+import ru.backend.rest.validation.dto.ValidationResultDto;
 import ru.backend.service.git.GitService;
 import ru.backend.service.git.GitWriterService;
+import ru.backend.service.validation.TemplateValidationService;
 
 import java.io.File;
 import java.io.IOException;
@@ -23,6 +26,7 @@ public class GitWriterController {
 
     private final GitWriterService gitWriterService;
     private final GitService gitService;
+    private final TemplateValidationService validationService;
 
     @GetMapping("/{name}/branch/{branch}/exists")
     public ResponseEntity<Boolean> branchExists(@PathVariable String name, @PathVariable String branch) {
@@ -72,16 +76,30 @@ public class GitWriterController {
     }
 
     @PostMapping("/{name}/branch/{branch}/save")
-    public ResponseEntity<String> saveFile(
+    public ResponseEntity<ValidationResultDto> saveFile(
             @PathVariable String name,
             @PathVariable String branch,
             @RequestBody GitFileSaveRequest request
     ) {
         GitConnectionRequestDto repo = gitService.getByName(name);
+
         try {
             String fullPath = request.getPath();
             String filename = fullPath.contains("/") ? fullPath.substring(fullPath.lastIndexOf('/') + 1) : fullPath;
             String folderPath = fullPath.contains("/") ? fullPath.substring(0, fullPath.lastIndexOf('/')) : "";
+
+            String type = filename.endsWith(".tf") ? "terraform" :
+                    (filename.endsWith(".yml") || filename.endsWith(".yaml")) ? "ansible" : null;
+
+            if (type != null) {
+                ValidationRequestDto validationRequest = new ValidationRequestDto(fullPath, request.getContent());
+                ValidationResultDto result = validationService.validate(type, validationRequest);
+                if (!result.isValid()) {
+                    System.out.println("Валидация не прошла для файла: " + fullPath);
+                    System.out.println("Ошибка: " + result.getOutput());
+                    return ResponseEntity.badRequest().body(result);
+                }
+            }
 
             gitWriterService.pushFile(
                     repo,
@@ -91,9 +109,14 @@ public class GitWriterController {
                     request.getContent(),
                     request.getCommitMessage()
             );
-            return ResponseEntity.ok("Файл сохранён в Git");
+
+            System.out.println("✅ Файл сохранён: " + fullPath);
+            return ResponseEntity.ok(new ValidationResultDto(true, "Файл сохранён в Git"));
+
         } catch (IOException | GitAPIException e) {
-            return ResponseEntity.status(500).body("Ошибка при сохранении: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500)
+                    .body(new ValidationResultDto(false, "Ошибка при сохранении: " + e.getMessage()));
         }
     }
 
@@ -141,5 +164,21 @@ public class GitWriterController {
         GitConnectionRequestDto repo = gitService.getByName(name);
         List<GitCommitDto> commits = gitWriterService.getRecentCommits(repo, branch, path, limit);
         return ResponseEntity.ok(commits);
+    }
+
+    @PostMapping("/{name}/branch/{branch}/create-folder")
+    public ResponseEntity<String> createFolder(
+            @PathVariable String name,
+            @PathVariable String branch,
+            @RequestBody GitCreateFolderRequest request
+    ) {
+        GitConnectionRequestDto repo = gitService.getByName(name);
+
+        try {
+            gitWriterService.createFolder(repo, branch, request.getPath(), request.getCommitMessage());
+            return ResponseEntity.ok("Папка успешно создана");
+        } catch (IOException | GitAPIException e) {
+            return ResponseEntity.status(500).body("Ошибка при создании папки: " + e.getMessage());
+        }
     }
 }

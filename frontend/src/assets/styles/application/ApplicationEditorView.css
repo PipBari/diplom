@@ -1,0 +1,94 @@
+.editor-layout {
+    display: flex;
+    height: calc(100vh - 60px);
+}
+.file-tree {
+    width: 250px;
+    background: #f3f4f6;
+    border-right: 1px solid #ddd;
+    padding: 1rem;
+    overflow-y: auto;
+}
+.file-tree-actions {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+.file-tree-actions button {
+    flex: 1;
+    margin-right: 0.5rem;
+}
+.file-tree-actions button:last-child {
+    margin-right: 0;
+}
+.editor-pane {
+    flex: 1;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+}
+.editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+.editor-textarea {
+    flex: 1;
+    font-family: monospace;
+    font-size: 14px;
+    padding: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background: #fff;
+    resize: none;
+}
+.commit-header {
+    margin-bottom: 0.8rem;
+    font-size: 0.9rem;
+    color: #444;
+}
+.status-block {
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background: #f4f4f4;
+    border-left: 4px solid #4caf50;
+    border-radius: 4px;
+}
+.error-block {
+    margin-top: 0.5rem;
+    background: #ffe0e0;
+    border: 1px solid #cc0000;
+    padding: 0.5rem;
+    color: #900;
+    border-radius: 4px;
+}
+.tip-block {
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background: #e0f7fa;
+    border-left: 4px solid #00bcd4;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    color: #007c91;
+}
+.overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.dialog {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 6px;
+    min-width: 300px;
+}
+.dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 1rem;
+}

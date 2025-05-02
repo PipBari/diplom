@@ -1,13 +1,15 @@
 <template>
   <div class="editor-layout">
     <div class="file-tree">
-      <ul>
-        <li v-for="entry in fileTree" :key="entry.name">
-          <span @click="loadEntry(entry)">
-            📄 {{ entry.name }}
-          </span>
-        </li>
-      </ul>
+      <div class="file-tree-actions">
+        <button @click="showNewFileDialog = true">+ Файл</button>
+        <button @click="showNewFolderDialog = true">📁 Папка</button>
+      </div>
+      <FileTreeNode
+          v-if="rootEntry"
+          :node="rootEntry"
+          @open-file="loadEntry"
+      />
     </div>
 
     <div class="editor-pane">
@@ -16,7 +18,6 @@
           <span class="commit-message">💬 {{ commits[0].message }}</span>
           <span class="commit-meta"> — {{ commits[0].author }}, {{ formatDate(commits[0].date) }}</span>
         </div>
-
         <details class="commit-history">
           <summary>История коммитов</summary>
           <ul>
@@ -28,11 +29,43 @@
       </div>
 
       <div class="editor-header">
-        <span>{{ currentFileName || 'Выберите файл слева' }}</span>
+        <span>{{ currentFileName || 'Выберите файл' }}</span>
         <button v-if="currentFileContent !== null" @click="saveFile">Сохранить</button>
       </div>
 
-      <textarea v-if="currentFileContent !== null" v-model="currentFileContent" class="editor-textarea" />
+      <textarea
+          v-if="currentFileContent !== null"
+          v-model="currentFileContent"
+          class="editor-textarea"
+      />
+
+      <div v-if="validationTip" class="tip-block">💡 {{ validationTip }}</div>
+      <div v-if="validationStatus" class="status-block">{{ validationStatus }}</div>
+      <div v-if="validationError" class="error-block">❌ {{ validationError }}</div>
+    </div>
+
+    <!-- Новый файл -->
+    <div v-if="showNewFileDialog" class="overlay">
+      <div class="dialog">
+        <h3>Новый файл</h3>
+        <input v-model="newFileName" placeholder="example.tf или playbook.yml" />
+        <div class="dialog-actions">
+          <button @click="createNewFile">Создать</button>
+          <button @click="showNewFileDialog = false">Отмена</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Новая папка -->
+    <div v-if="showNewFolderDialog" class="overlay">
+      <div class="dialog">
+        <h3>Новая папка</h3>
+        <input v-model="newFolderName" placeholder="имя-папки" />
+        <div class="dialog-actions">
+          <button @click="createNewFolder">Создать</button>
+          <button @click="showNewFolderDialog = false">Отмена</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -41,37 +74,77 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api/axios'
+import FileTreeNode from '@/components/FileTreeNode.vue'
 
 const route = useRoute()
-const app = ref(null)
-const fileTree = ref([])
+const app = ref({})
+const repo = ref({})
+const rootEntry = ref(null)
+const commits = ref([])
+
 const currentFileName = ref('')
 const currentFileContent = ref(null)
-const repo = ref(null)
-const commits = ref([])
+
+const showNewFileDialog = ref(false)
+const showNewFolderDialog = ref(false)
+
+const newFileName = ref('')
+const newFolderName = ref('')
+
+const validationError = ref(null)
+const validationStatus = ref(null)
+const validationTip = ref(null)
+
+const formatDate = (raw) => {
+  const normalized = raw.replace('MSK', '+03:00')
+  return new Date(normalized).toLocaleString('ru-RU', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  })
+}
 
 onMounted(async () => {
   const appsRes = await api.get('/applications')
   app.value = appsRes.data.find(a => a.name === route.params.name)
-
   const reposRes = await api.get('/settings/git')
   repo.value = reposRes.data.find(r => r.name === app.value.repoName)
-
-  const treeRes = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/tree`, {
-    params: { path: app.value.path }
-  })
-  fileTree.value = treeRes.data
+  await refreshTree()
 })
 
-const loadEntry = async (entry) => {
-  const path = `${app.value.path}/${entry.name}`
-  const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/file`, {
-    params: { path }
+const refreshTree = async () => {
+  const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/entry`, {
+    params: { path: app.value.path }
   })
-  currentFileContent.value = res.data
-  currentFileName.value = entry.name
+  rootEntry.value = enrichEntry(res.data, '')
+}
 
-  await loadCommits(path)
+const enrichEntry = (entry, parentPath) => {
+  entry.fullPath = parentPath ? `${parentPath}/${entry.name}` : entry.name
+  entry.fullPath = entry.fullPath.replace(/\/+/g, '/')
+  if (entry.children) {
+    entry.children = entry.children.map(child =>
+        enrichEntry(child, entry.fullPath)
+    )
+  }
+  return entry
+}
+
+const loadEntry = async (path) => {
+  if (!path || path.endsWith('/')) return
+
+  try {
+    const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/file`, {
+      params: { path }
+    })
+    currentFileContent.value = res.data
+    currentFileName.value = path
+    await loadCommits(path)
+    setTip(path)
+  } catch (e) {
+    validationError.value = 'Ошибка при загрузке файла'
+    currentFileContent.value = null
+    currentFileName.value = ''
+  }
 }
 
 const loadCommits = async (path) => {
@@ -80,102 +153,78 @@ const loadCommits = async (path) => {
       params: { path, limit: 5 }
     })
     commits.value = res.data
-  } catch (e) {
-    console.error('Ошибка при загрузке коммитов:', e)
+  } catch {
+    commits.value = []
   }
 }
 
-const formatDate = (raw) => {
-  const normalized = raw.replace('MSK', '+03:00')
-  const d = new Date(normalized)
-  return d.toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+const saveFile = async () => {
+  const filename = currentFileName.value
+  const type = detectType(filename)
+  validationStatus.value = '🔄 Проверка синтаксиса...'
+  validationError.value = null
+
+  if (type) {
+    const res = await api.post(`/validate/${type}`, {
+      path: filename,
+      content: currentFileContent.value
+    })
+    if (!res.data.valid) {
+      validationError.value = res.data.output
+      validationStatus.value = '❌ Ошибка валидации'
+      return
+    }
+    validationStatus.value = '✅ Синтаксис корректен'
+  }
+
+  await api.post(`/git/writer/${repo.value.name}/branch/${app.value.branch}/save`, {
+    path: filename,
+    content: currentFileContent.value,
+    commitMessage: `Обновление файла ${filename}`
   })
+
+  await refreshTree()
+  alert('✅ Файл сохранён')
 }
 
-const saveFile = async () => {
-  const path = `${app.value.path}/${currentFileName.value}`
-  await api.post(`/git/writer/${repo.value.name}/branch/${app.value.branch}/save`, {
-    path,
-    content: currentFileContent.value,
-    commitMessage: `Обновление файла ${currentFileName.value}`
+const detectType = (filename) => {
+  if (filename.endsWith('.tf')) return 'terraform'
+  if (filename.endsWith('.yml') || filename.endsWith('.yaml')) return 'ansible'
+  return null
+}
+
+const setTip = (filename) => {
+  if (filename.endsWith('.tf')) validationTip.value = 'Terraform: будет применена terraform validate'
+  else if (filename.endsWith('.yml') || filename.endsWith('.yaml')) validationTip.value = 'Ansible: будет применён ansible-lint'
+  else validationTip.value = null
+}
+
+const createNewFile = () => {
+  const name = newFileName.value.trim()
+  if (!name) {
+    validationError.value = 'Имя файла не может быть пустым'
+    return
+  }
+  currentFileName.value = `${app.value.path}/${name}`.replace(/\/+/g, '/')
+  currentFileContent.value = ''
+  showNewFileDialog.value = false
+  setTip(name)
+}
+
+const createNewFolder = async () => {
+  const name = newFolderName.value.trim()
+  if (!name) {
+    validationError.value = 'Имя папки не может быть пустым'
+    return
+  }
+
+  await api.post(`/git/writer/${repo.value.name}/branch/${app.value.branch}/create-folder`, {
+    path: `${app.value.path}/${name}`.replace(/\/+/g, '/'),
+    commitMessage: `Создание папки ${name}`
   })
-  alert('Файл сохранён и отправлен в Git')
+  showNewFolderDialog.value = false
+  await refreshTree()
 }
 </script>
 
-<style scoped>
-.editor-layout {
-  display: flex;
-  height: calc(100vh - 60px);
-}
-
-.file-tree {
-  width: 250px;
-  background: #f3f4f6;
-  border-right: 1px solid #ddd;
-  padding: 1rem;
-  overflow-y: auto;
-}
-
-.editor-pane {
-  flex: 1;
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-}
-
-.commit-header {
-  margin-bottom: 0.8rem;
-  font-size: 0.9rem;
-  color: #444;
-}
-
-.commit-main {
-  margin-bottom: 0.3rem;
-}
-
-.commit-message {
-  font-weight: 500;
-}
-
-.commit-meta {
-  color: #666;
-  font-size: 0.85rem;
-}
-
-.commit-history summary {
-  cursor: pointer;
-  margin-bottom: 0.3rem;
-  color: #3b82f6;
-}
-
-.commit-history ul {
-  padding-left: 1rem;
-  font-size: 0.85rem;
-  line-height: 1.4;
-}
-
-.editor-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5rem;
-}
-
-.editor-textarea {
-  flex: 1;
-  width: 100%;
-  font-family: monospace;
-  font-size: 14px;
-  padding: 1rem;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  background: #fff;
-  resize: none;
-}
-</style>
+<style src="@/assets/styles/application/ApplicationEditorView.css"></style>
