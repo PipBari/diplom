@@ -193,4 +193,20 @@ public class GitWriterController {
             return ResponseEntity.status(500).body("Ошибка при удалении: " + e.getMessage());
         }
     }
+
+    @PutMapping("/{name}/branch/{branch}/rename")
+    public ResponseEntity<String> renamePath(
+            @PathVariable String name,
+            @PathVariable String branch,
+            @RequestBody GitRenameRequest request
+    ) {
+        GitConnectionRequestDto repo = gitService.getByName(name);
+
+        try {
+            gitWriterService.renamePath(repo, branch, request.getOldPath(), request.getNewPath(), request.getCommitMessage());
+            return ResponseEntity.ok("Переименование успешно выполнено");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка при переименовании: " + e.getMessage());
+        }
+    }
 }

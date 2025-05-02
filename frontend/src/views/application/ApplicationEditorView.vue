@@ -1,10 +1,7 @@
 <template>
   <div class="editor-layout">
-    <div
-        class="file-tree"
-        @contextmenu.self.prevent="showContextMenu($event, null)"
-    >
-    <FileTreeNode
+    <div class="file-tree" @contextmenu.self.prevent="showContextMenu($event, null)">
+      <FileTreeNode
           v-for="child in rootEntry?.children || []"
           :key="child.fullPath"
           :node="child"
@@ -17,17 +14,20 @@
 
     <div class="editor-pane">
       <div class="commit-header" v-if="commits.length > 0">
-        <div class="commit-main">
+        <div
+            class="commit-main-wrapper"
+            @mouseenter="showCommitHistory = true"
+            @mouseleave="showCommitHistory = false"
+        >
           💬 {{ commits[0].message }} — {{ commits[0].author }}, {{ formatDate(commits[0].date) }}
+          <div class="commit-popup" v-if="showCommitHistory">
+            <ul>
+              <li v-for="c in commits" :key="c.date">
+                <b>{{ formatDate(c.date) }}</b> — {{ c.author }}: {{ c.message }}
+              </li>
+            </ul>
+          </div>
         </div>
-        <details>
-          <summary>▶ История коммитов</summary>
-          <ul>
-            <li v-for="c in commits" :key="c.date">
-              <b>{{ formatDate(c.date) }}</b> — {{ c.author }}: {{ c.message }}
-            </li>
-          </ul>
-        </details>
       </div>
 
       <div class="editor-header">
@@ -53,6 +53,13 @@
     >
       <div class="context-item" @click="openNewFileDialog">📄 Новый файл</div>
       <div class="context-item" @click="openNewFolderDialog">📁 Новая папка</div>
+      <div
+          v-if="contextMenu.node"
+          class="context-item"
+          @click="openRenameDialog"
+      >
+        ✏️ Переименовать
+      </div>
       <div
           v-if="contextMenu.node && canDelete(contextMenu.node.name)"
           class="context-item danger"
@@ -83,12 +90,27 @@
         </div>
       </div>
     </div>
+
+    <div v-if="showRenameDialog" class="overlay" @click.self="showRenameDialog = false">
+      <div class="dialog">
+        <h3>Переименовать</h3>
+        <input
+            v-model="renameNewName"
+            :placeholder="contextMenu.node?.name"
+            @keyup.enter="renameEntry"
+        />
+        <div class="dialog-actions">
+          <button @click="renameEntry">Переименовать</button>
+          <button @click="showRenameDialog = false">Отмена</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import {ref, onMounted} from 'vue'
-import {useRoute} from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import api from '@/api/axios'
 import FileTreeNode from '@/components/FileTreeNode.vue'
 import '@/assets/styles/application/ApplicationEditorView.css'
@@ -104,14 +126,19 @@ const currentFileContent = ref(null)
 
 const showNewFileDialog = ref(false)
 const showNewFolderDialog = ref(false)
+const showRenameDialog = ref(false)
+
 const newFileName = ref('')
 const newFolderName = ref('')
+const renameNewName = ref('')
 
 const validationError = ref(null)
 const validationStatus = ref(null)
 const validationTip = ref(null)
 
-const contextMenu = ref({visible: false, x: 0, y: 0, node: null})
+const contextMenu = ref({ visible: false, x: 0, y: 0, node: null })
+
+const showCommitHistory = ref(false)
 
 onMounted(async () => {
   const appsRes = await api.get('/applications')
@@ -132,7 +159,7 @@ const formatDate = (raw) => {
 
 const refreshTree = async () => {
   const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/entry`, {
-    params: {path: app.value.path}
+    params: { path: app.value.path }
   })
   rootEntry.value = enrichEntry(res.data, '')
 }
@@ -156,7 +183,7 @@ const loadEntry = async (path) => {
   if (!path || path.endsWith('/')) return
   try {
     const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/file`, {
-      params: {path}
+      params: { path }
     })
     currentFileContent.value = res.data
     currentFileName.value = path
@@ -172,7 +199,7 @@ const loadEntry = async (path) => {
 const loadCommits = async (path) => {
   try {
     const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/commits`, {
-      params: {path, limit: 5}
+      params: { path, limit: 5 }
     })
     commits.value = res.data
   } catch {
@@ -228,6 +255,35 @@ const openNewFolderDialog = () => {
   showNewFolderDialog.value = true
   contextMenu.value.visible = false
 }
+const openRenameDialog = () => {
+  renameNewName.value = contextMenu.value.node?.name || ''
+  showRenameDialog.value = true
+  contextMenu.value.visible = false
+}
+const renameEntry = async () => {
+  const newName = renameNewName.value.trim()
+  const node = contextMenu.value.node
+  if (!newName || !node) return
+
+  const oldPath = node.fullPath
+  const parts = oldPath.split('/')
+  parts.pop()
+  const basePath = parts.join('/')
+  const newPath = `${basePath}/${newName}`.replace(/\/+/g, '/')
+
+  try {
+    await api.put(`/git/writer/${repo.value.name}/branch/${app.value.branch}/rename`, {
+      oldPath,
+      newPath,
+      commitMessage: `Переименование ${node.name} в ${newName}`
+    })
+    showRenameDialog.value = false
+    await refreshTree()
+  } catch (e) {
+    validationError.value = 'Ошибка при переименовании'
+  }
+}
+
 const showContextMenu = (event, node) => {
   contextMenu.value = {
     visible: true,

@@ -296,4 +296,35 @@ public class GitWriterService {
         }
         dir.delete();
     }
+
+    public void renamePath(GitConnectionRequestDto repo, String branch, String oldPath, String newPath, String commitMessage) throws IOException, GitAPIException {
+        File tempDir = Files.createTempDirectory("repo-rename").toFile();
+
+        try (Git git = Git.cloneRepository()
+                .setURI(repo.getRepoUrl())
+                .setBranch(branch)
+                .setDirectory(tempDir)
+                .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                .call()) {
+
+            File oldFile = new File(tempDir, oldPath);
+            File newFile = new File(tempDir, newPath);
+
+            if (!oldFile.exists()) {
+                throw new IOException("Исходный путь не существует: " + oldPath);
+            }
+
+            if (!oldFile.renameTo(newFile)) {
+                throw new IOException("Не удалось переименовать: " + oldPath + " -> " + newPath);
+            }
+
+            git.rm().addFilepattern(oldPath).call();
+            git.add().addFilepattern(newPath).call();
+            git.commit().setMessage(commitMessage).call();
+            git.push().setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken())).call();
+
+        } finally {
+            deleteDirectory(tempDir);
+        }
+    }
 }

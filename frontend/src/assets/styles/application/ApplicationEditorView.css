@@ -206,3 +206,31 @@
     border-left: 1px solid #ddd;
     padding-left: 4px;
 }
+
+.commit-main-wrapper {
+    position: relative;
+    display: inline-block;
+    cursor: default;
+}
+
+.commit-popup {
+    position: absolute;
+    top: 1.5em;
+    left: 0;
+    background: #fff;
+    border: 1px solid #ccc;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    padding: 0.5em;
+    z-index: 10;
+    width: max-content;
+    white-space: nowrap;
+    font-size: 0.9em;
+}
+.commit-popup ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.commit-popup li {
+    margin-bottom: 0.3em;
+}
