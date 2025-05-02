@@ -2,123 +2,7 @@
     display: flex;
     height: calc(100vh - 60px);
 }
-.file-tree {
-    width: 250px;
-    background: #f3f4f6;
-    border-right: 1px solid #ddd;
-    padding: 1rem;
-    overflow-y: auto;
-}
-.file-tree-actions {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 1rem;
-}
-.file-tree-actions button {
-    flex: 1;
-    margin-right: 0.5rem;
-}
-.file-tree-actions button:last-child {
-    margin-right: 0;
-}
-.editor-pane {
-    flex: 1;
-    padding: 1rem;
-    display: flex;
-    flex-direction: column;
-}
-.editor-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0.5rem;
-}
-.editor-textarea {
-    flex: 1;
-    font-family: monospace;
-    font-size: 14px;
-    padding: 1rem;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    background: #fff;
-    resize: none;
-}
-.commit-header {
-    margin-bottom: 0.8rem;
-    font-size: 0.9rem;
-    color: #444;
-}
-.status-block {
-    margin-top: 0.5rem;
-    padding: 0.5rem;
-    background: #f4f4f4;
-    border-left: 4px solid #4caf50;
-    border-radius: 4px;
-}
-.error-block {
-    margin-top: 0.5rem;
-    background: #ffe0e0;
-    border: 1px solid #cc0000;
-    padding: 0.5rem;
-    color: #900;
-    border-radius: 4px;
-}
-.tip-block {
-    margin-top: 0.5rem;
-    padding: 0.5rem;
-    background: #e0f7fa;
-    border-left: 4px solid #00bcd4;
-    border-radius: 4px;
-    font-size: 0.9rem;
-    color: #007c91;
-}
-.overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.3);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-.dialog {
-    background: white;
-    padding: 1.5rem;
-    border-radius: 6px;
-    min-width: 300px;
-}
-.dialog-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 1rem;
-    margin-top: 1rem;
-}
 
-.context-menu {
-    position: absolute;
-    background: white;
-    border: 1px solid #ccc;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
-    z-index: 1000;
-    padding: 4px 0;
-    min-width: 160px;
-    font-size: 14px;
-    border-radius: 4px;
-}
-
-.context-menu > div {
-    padding: 6px 12px;
-    cursor: pointer;
-    white-space: nowrap;
-}
-
-.context-menu > div:hover {
-    background-color: #f0f0f0;
-}
-
-.editor-layout {
-    display: flex;
-    height: calc(100vh - 60px);
-}
 .file-tree {
     width: 250px;
     background: #f3f4f6;
@@ -126,18 +10,36 @@
     padding: 0.5rem 0;
     overflow-y: auto;
 }
+
+.file-tree-actions {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.file-tree-actions button {
+    flex: 1;
+    margin-right: 0.5rem;
+}
+
+.file-tree-actions button:last-child {
+    margin-right: 0;
+}
+
 .editor-pane {
     flex: 1;
     padding: 1rem;
     display: flex;
     flex-direction: column;
 }
+
 .editor-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 0.5rem;
 }
+
 .editor-textarea {
     flex: 1;
     font-family: monospace;
@@ -148,35 +50,39 @@
     background: #fff;
     resize: none;
 }
+
 .commit-header {
     margin-bottom: 0.8rem;
     font-size: 0.9rem;
     color: #444;
 }
-.status-block {
-    margin-top: 0.5rem;
-    padding: 0.5rem;
-    background: #f4f4f4;
-    border-left: 4px solid #4caf50;
-    border-radius: 4px;
-}
+
+.tip-block,
+.status-block,
 .error-block {
     margin-top: 0.5rem;
-    background: #ffe0e0;
-    border: 1px solid #cc0000;
     padding: 0.5rem;
-    color: #900;
     border-radius: 4px;
 }
+
 .tip-block {
-    margin-top: 0.5rem;
-    padding: 0.5rem;
     background: #e0f7fa;
     border-left: 4px solid #00bcd4;
-    border-radius: 4px;
     font-size: 0.9rem;
     color: #007c91;
 }
+
+.status-block {
+    background: #f4f4f4;
+    border-left: 4px solid #4caf50;
+}
+
+.error-block {
+    background: #ffe0e0;
+    border: 1px solid #cc0000;
+    color: #900;
+}
+
 .overlay {
     position: fixed;
     inset: 0;
@@ -185,18 +91,21 @@
     justify-content: center;
     align-items: center;
 }
+
 .dialog {
     background: white;
     padding: 1.5rem;
     border-radius: 6px;
     min-width: 300px;
 }
+
 .dialog-actions {
     display: flex;
     justify-content: flex-end;
     gap: 1rem;
     margin-top: 1rem;
 }
+
 .context-menu {
     position: fixed;
     background: white;
@@ -204,11 +113,95 @@
     border-radius: 4px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
     z-index: 1000;
+    padding: 4px 0;
+    min-width: 160px;
+    font-size: 14px;
 }
+
 .context-item {
     padding: 6px 12px;
     cursor: pointer;
+    white-space: nowrap;
 }
+
 .context-item:hover {
-    background-color: #eee;
+    background-color: #f0f0f0;
+}
+
+.context-item.danger {
+    color: #b00020;
+}
+
+.context-menu {
+    position: fixed;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    z-index: 9999; /* Обязательно выше всех */
+    padding: 4px 0;
+    min-width: 160px;
+    font-size: 14px;
+}
+
+.context-item {
+    padding: 6px 12px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.context-item:hover {
+    background-color: #f0f0f0;
+}
+
+.context-item.danger {
+    color: #b00020;
+}
+
+.file-node {
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
+    color: #333;
+    cursor: pointer;
+}
+
+.node-label {
+    display: flex;
+    align-items: center;
+    padding: 2px 6px;
+    user-select: none;
+    transition: background 0.2s;
+}
+
+.node-label:hover {
+    background: #e0e0e0;
+}
+
+.arrow {
+    width: 16px;
+    text-align: center;
+    margin-right: 4px;
+    font-size: 12px;
+    color: #888;
+}
+
+.icon {
+    width: 16px;
+    margin-right: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.file-icon {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+}
+
+.children {
+    margin-left: 12px;
+    border-left: 1px solid #ddd;
+    padding-left: 4px;
 }

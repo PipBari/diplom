@@ -177,4 +177,20 @@ public class GitWriterController {
             return ResponseEntity.status(500).body("Ошибка при создании папки: " + e.getMessage());
         }
     }
+
+    @DeleteMapping("/{name}/branch/{branch}/delete")
+    public ResponseEntity<String> deletePath(
+            @PathVariable String name,
+            @PathVariable String branch,
+            @RequestParam String path,
+            @RequestParam(defaultValue = "Удаление") String commitMessage
+    ) {
+        GitConnectionRequestDto repo = gitService.getByName(name);
+        try {
+            gitWriterService.deletePath(repo, branch, path, commitMessage);
+            return ResponseEntity.ok("Удаление успешно выполнено");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка при удалении: " + e.getMessage());
+        }
+    }
 }

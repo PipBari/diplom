@@ -43,7 +43,6 @@
       <div v-if="validationError" class="error-block">❌ {{ validationError }}</div>
     </div>
 
-    <!-- Контекстное меню -->
     <div
         v-if="contextMenu.visible"
         class="context-menu"
@@ -51,13 +50,18 @@
     >
       <div class="context-item" @click="openNewFileDialog">📄 Новый файл</div>
       <div class="context-item" @click="openNewFolderDialog">📁 Новая папка</div>
+      <div
+          class="context-item danger"
+          v-if="contextMenu.node"
+          @click="deletePath"
+      >🗑 Удалить</div>
     </div>
 
-    <!-- Новый файл -->
+    <!-- Модалки создания -->
     <div v-if="showNewFileDialog" class="overlay">
       <div class="dialog">
         <h3>Новый файл</h3>
-        <input v-model="newFileName" placeholder="example.tf или playbook.yml" />
+        <input v-model="newFileName" placeholder="example.tf" />
         <div class="dialog-actions">
           <button @click="createNewFile">Создать</button>
           <button @click="showNewFileDialog = false">Отмена</button>
@@ -65,11 +69,10 @@
       </div>
     </div>
 
-    <!-- Новая папка -->
     <div v-if="showNewFolderDialog" class="overlay">
       <div class="dialog">
         <h3>Новая папка</h3>
-        <input v-model="newFolderName" placeholder="имя-папки" />
+        <input v-model="newFolderName" placeholder="папка" />
         <div class="dialog-actions">
           <button @click="createNewFolder">Создать</button>
           <button @click="showNewFolderDialog = false">Отмена</button>
@@ -84,6 +87,9 @@ import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api/axios'
 import FileTreeNode from '@/components/FileTreeNode.vue'
+
+// Импорт внешнего CSS-файла
+import '@/assets/styles/application/ApplicationEditorView.css'
 
 const route = useRoute()
 const app = ref({})
@@ -103,15 +109,7 @@ const validationError = ref(null)
 const validationStatus = ref(null)
 const validationTip = ref(null)
 
-const contextMenu = ref({ visible: false, x: 0, y: 0 })
-
-const formatDate = (raw) => {
-  const normalized = raw.replace('MSK', '+03:00')
-  return new Date(normalized).toLocaleString('ru-RU', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  })
-}
+const contextMenu = ref({ visible: false, x: 0, y: 0, node: null })
 
 onMounted(async () => {
   const appsRes = await api.get('/applications')
@@ -121,6 +119,14 @@ onMounted(async () => {
   await refreshTree()
   document.addEventListener('click', () => (contextMenu.value.visible = false))
 })
+
+const formatDate = (raw) => {
+  const normalized = raw.replace('MSK', '+03:00')
+  return new Date(normalized).toLocaleString('ru-RU', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  })
+}
 
 const refreshTree = async () => {
   const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/entry`, {
@@ -198,7 +204,6 @@ const saveFile = async () => {
   })
 
   await refreshTree()
-  alert('✅ Файл сохранён')
 }
 
 const detectType = (filename) => {
@@ -221,7 +226,6 @@ const openNewFolderDialog = () => {
   showNewFolderDialog.value = true
   contextMenu.value.visible = false
 }
-
 const showContextMenu = (event, node) => {
   contextMenu.value = {
     visible: true,
@@ -255,6 +259,21 @@ const createNewFolder = async () => {
     commitMessage: `Создание папки ${name}`
   })
   showNewFolderDialog.value = false
+  await refreshTree()
+}
+
+const deletePath = async () => {
+  if (!contextMenu.value.node) return
+  const confirmed = confirm(`Удалить ${contextMenu.value.node.name}?`)
+  if (!confirmed) return
+
+  await api.delete(`/git/writer/${repo.value.name}/branch/${app.value.branch}/delete`, {
+    params: {
+      path: contextMenu.value.node.fullPath,
+      commitMessage: `Удаление ${contextMenu.value.node.name}`
+    }
+  })
+  contextMenu.value.visible = false
   await refreshTree()
 }
 </script>

@@ -262,6 +262,32 @@ public class GitWriterService {
         }
     }
 
+    public void deletePath(GitConnectionRequestDto repo, String branch, String path, String commitMessage) throws IOException, GitAPIException {
+        File tempDir = Files.createTempDirectory("repo-delete").toFile();
+
+        try (Git git = Git.cloneRepository()
+                .setURI(repo.getRepoUrl())
+                .setBranch(branch)
+                .setDirectory(tempDir)
+                .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                .call()) {
+
+            File target = new File(tempDir, path);
+            if (!target.exists()) {
+                throw new IOException("Файл или папка не найдены: " + path);
+            }
+
+            deleteDirectory(target);
+
+            git.rm().addFilepattern(path).call();
+            git.commit().setMessage(commitMessage).call();
+            git.push().setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken())).call();
+
+        } finally {
+            deleteDirectory(tempDir);
+        }
+    }
+
     private void deleteDirectory(File dir) {
         if (dir == null || !dir.exists()) return;
         File[] files = dir.listFiles();
