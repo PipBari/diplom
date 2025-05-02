@@ -1,7 +1,10 @@
 <template>
   <div class="editor-layout">
-    <div class="file-tree" @contextmenu.prevent="showContextMenu($event, null)">
-      <FileTreeNode
+    <div
+        class="file-tree"
+        @contextmenu.self.prevent="showContextMenu($event, null)"
+    >
+    <FileTreeNode
           v-for="child in rootEntry?.children || []"
           :key="child.fullPath"
           :node="child"
@@ -51,14 +54,15 @@
       <div class="context-item" @click="openNewFileDialog">📄 Новый файл</div>
       <div class="context-item" @click="openNewFolderDialog">📁 Новая папка</div>
       <div
+          v-if="contextMenu.node && canDelete(contextMenu.node.name)"
           class="context-item danger"
-          v-if="contextMenu.node"
           @click="deletePath"
-      >🗑 Удалить</div>
+      >
+        🗑 Удалить
+      </div>
     </div>
 
-    <!-- Модалки создания -->
-    <div v-if="showNewFileDialog" class="overlay">
+    <div v-if="showNewFileDialog" class="overlay" @click.self="showNewFileDialog = false">
       <div class="dialog">
         <h3>Новый файл</h3>
         <input v-model="newFileName" placeholder="example.tf" />
@@ -69,7 +73,7 @@
       </div>
     </div>
 
-    <div v-if="showNewFolderDialog" class="overlay">
+    <div v-if="showNewFolderDialog" class="overlay" @click.self="showNewFolderDialog = false">
       <div class="dialog">
         <h3>Новая папка</h3>
         <input v-model="newFolderName" placeholder="папка" />
@@ -83,12 +87,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import {ref, onMounted} from 'vue'
+import {useRoute} from 'vue-router'
 import api from '@/api/axios'
 import FileTreeNode from '@/components/FileTreeNode.vue'
-
-// Импорт внешнего CSS-файла
 import '@/assets/styles/application/ApplicationEditorView.css'
 
 const route = useRoute()
@@ -109,7 +111,7 @@ const validationError = ref(null)
 const validationStatus = ref(null)
 const validationTip = ref(null)
 
-const contextMenu = ref({ visible: false, x: 0, y: 0, node: null })
+const contextMenu = ref({visible: false, x: 0, y: 0, node: null})
 
 onMounted(async () => {
   const appsRes = await api.get('/applications')
@@ -130,7 +132,7 @@ const formatDate = (raw) => {
 
 const refreshTree = async () => {
   const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/entry`, {
-    params: { path: app.value.path }
+    params: {path: app.value.path}
   })
   rootEntry.value = enrichEntry(res.data, '')
 }
@@ -154,7 +156,7 @@ const loadEntry = async (path) => {
   if (!path || path.endsWith('/')) return
   try {
     const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/file`, {
-      params: { path }
+      params: {path}
     })
     currentFileContent.value = res.data
     currentFileName.value = path
@@ -170,7 +172,7 @@ const loadEntry = async (path) => {
 const loadCommits = async (path) => {
   try {
     const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/commits`, {
-      params: { path, limit: 5 }
+      params: {path, limit: 5}
     })
     commits.value = res.data
   } catch {
@@ -233,6 +235,10 @@ const showContextMenu = (event, node) => {
     y: event.clientY,
     node
   }
+}
+
+const canDelete = (name) => {
+  return name !== '.gitkeep' && name.toLowerCase() !== 'readme.md'
 }
 
 const createNewFile = () => {
