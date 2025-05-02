@@ -209,4 +209,19 @@ public class GitWriterController {
             return ResponseEntity.status(500).body("Ошибка при переименовании: " + e.getMessage());
         }
     }
+
+    @PostMapping("/{name}/branch/{branch}/revert")
+    public ResponseEntity<String> revertCommit(
+            @PathVariable String name,
+            @PathVariable String branch,
+            @RequestBody GitRevertRequest request
+    ) {
+        GitConnectionRequestDto repo = gitService.getByName(name);
+        try {
+            gitWriterService.revertCommit(repo, branch, request.getCommitHash(), request.getCommitMessage());
+            return ResponseEntity.ok("Коммит успешно отменён");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка при откате: " + e.getMessage());
+        }
+    }
 }

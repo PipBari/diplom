@@ -3,6 +3,7 @@ package ru.backend.service.git;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.springframework.stereotype.Service;
@@ -194,7 +195,8 @@ public class GitWriterService {
                 result.add(new GitCommitDto(
                         commit.getAuthorIdent().getName(),
                         commit.getShortMessage(),
-                        commit.getAuthorIdent().getWhen().toString()
+                        commit.getAuthorIdent().getWhen().toString(),
+                        commit.getName()
                 ));
             }
 
@@ -322,6 +324,31 @@ public class GitWriterService {
             git.add().addFilepattern(newPath).call();
             git.commit().setMessage(commitMessage).call();
             git.push().setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken())).call();
+
+        } finally {
+            deleteDirectory(tempDir);
+        }
+    }
+
+    public void revertCommit(GitConnectionRequestDto repo, String branch, String commitHash, String commitMessage) throws IOException, GitAPIException {
+        File tempDir = Files.createTempDirectory("repo-revert").toFile();
+
+        try (Git git = Git.cloneRepository()
+                .setURI(repo.getRepoUrl())
+                .setBranch(branch)
+                .setDirectory(tempDir)
+                .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                .call()) {
+
+            ObjectId commitId = git.getRepository().resolve(commitHash);
+            git.revert()
+                    .include(commitId)
+                    .call();
+
+            git.commit().setMessage(commitMessage).call();
+            git.push()
+                    .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                    .call();
 
         } finally {
             deleteDirectory(tempDir);

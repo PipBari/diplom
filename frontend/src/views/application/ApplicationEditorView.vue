@@ -22,8 +22,13 @@
           💬 {{ commits[0].message }} — {{ commits[0].author }}, {{ formatDate(commits[0].date) }}
           <div class="commit-popup" v-if="showCommitHistory">
             <ul>
-              <li v-for="c in commits" :key="c.date">
-                <b>{{ formatDate(c.date) }}</b> — {{ c.author }}: {{ c.message }}
+              <li v-for="c in commits" :key="c.hash">
+                <div class="commit-item">
+                  <div class="commit-text">
+                    <b>{{ formatDate(c.date) }}</b> — {{ c.author }}: {{ c.message }}
+                  </div>
+                  <button class="revert-button" @click.stop="revertCommit(c)">↩️</button>
+                </div>
               </li>
             </ul>
           </div>
@@ -109,8 +114,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import {ref, onMounted} from 'vue'
+import {useRoute} from 'vue-router'
 import api from '@/api/axios'
 import FileTreeNode from '@/components/FileTreeNode.vue'
 import '@/assets/styles/application/ApplicationEditorView.css'
@@ -136,7 +141,7 @@ const validationError = ref(null)
 const validationStatus = ref(null)
 const validationTip = ref(null)
 
-const contextMenu = ref({ visible: false, x: 0, y: 0, node: null })
+const contextMenu = ref({visible: false, x: 0, y: 0, node: null})
 
 const showCommitHistory = ref(false)
 
@@ -159,7 +164,7 @@ const formatDate = (raw) => {
 
 const refreshTree = async () => {
   const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/entry`, {
-    params: { path: app.value.path }
+    params: {path: app.value.path}
   })
   rootEntry.value = enrichEntry(res.data, '')
 }
@@ -183,7 +188,7 @@ const loadEntry = async (path) => {
   if (!path || path.endsWith('/')) return
   try {
     const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/file`, {
-      params: { path }
+      params: {path}
     })
     currentFileContent.value = res.data
     currentFileName.value = path
@@ -199,7 +204,7 @@ const loadEntry = async (path) => {
 const loadCommits = async (path) => {
   try {
     const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/commits`, {
-      params: { path, limit: 5 }
+      params: {path, limit: 5}
     })
     commits.value = res.data
   } catch {
@@ -233,6 +238,23 @@ const saveFile = async () => {
   })
 
   await refreshTree()
+}
+
+const revertCommit = async (commit) => {
+  const confirmed = confirm(`Вы уверены, что хотите отменить коммит: "${commit.message}"?`)
+  if (!confirmed) return
+
+  try {
+    await api.post(`/git/writer/${repo.value.name}/branch/${app.value.branch}/revert`, {
+      commitHash: commit.hash,
+      commitMessage: `Revert: ${commit.message}`
+    })
+    alert('Коммит успешно отменён')
+    await refreshTree()
+    await loadCommits(currentFileName.value)
+  } catch (e) {
+    alert('Ошибка при откате коммита')
+  }
 }
 
 const detectType = (filename) => {

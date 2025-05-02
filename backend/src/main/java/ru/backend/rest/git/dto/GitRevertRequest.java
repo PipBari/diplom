@@ -6,10 +6,7 @@ import lombok.NoArgsConstructor;
 
 @Data
 @NoArgsConstructor @AllArgsConstructor
-public class GitCommitDto {
-    private String author;
-    private String message;
-    private String date;
-    private String hash;
+public class GitRevertRequest {
+    private String commitHash;
+    private String commitMessage;
 }
-
