@@ -6,7 +6,6 @@ import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.springframework.stereotype.Service;
-import ru.backend.rest.git.dto.FileEntryDto;
 import ru.backend.rest.git.dto.FileNodeDto;
 import ru.backend.rest.git.dto.GitCommitDto;
 import ru.backend.rest.git.dto.GitConnectionRequestDto;
@@ -65,66 +64,60 @@ public class GitWriterService {
         }
     }
 
-    public List<GitCommitDto> getRecentCommits(GitConnectionRequestDto repo, String branch, String path, int limit) {
-        List<GitCommitDto> result = new ArrayList<>();
+    public FileNodeDto readEntry(GitConnectionRequestDto repo, String branch, String path) {
         File tempDir = null;
         try {
-            tempDir = Files.createTempDirectory("repo-log").toFile();
-            Git git = Git.cloneRepository()
+            tempDir = Files.createTempDirectory("repo-entry").toFile();
+            Git.cloneRepository()
                     .setURI(repo.getRepoUrl())
                     .setBranch(branch)
                     .setDirectory(tempDir)
                     .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
                     .call();
 
-            Iterable<RevCommit> logs = git.log()
-                    .addPath(path)
-                    .setMaxCount(limit)
+            File target = new File(tempDir, path);
+            if (!target.exists()) {
+                return new FileNodeDto("missing", "missing", "# Файл или папка не найдены", new ArrayList<>());
+            }
+
+            if (target.isDirectory()) {
+                List<FileNodeDto> children = readChildrenRecursive(target);
+                return new FileNodeDto(target.getName(), "folder", null, children);
+            }
+
+            String content = Files.readString(target.toPath(), StandardCharsets.UTF_8);
+            return new FileNodeDto(target.getName(), "file", content, new ArrayList<>());
+
+        } catch (Exception e) {
+            log.error("Ошибка при чтении entry: {}", e.getMessage());
+            return new FileNodeDto("error", "error", "# ошибка при чтении", new ArrayList<>());
+        } finally {
+            if (tempDir != null) deleteDirectory(tempDir);
+        }
+    }
+
+    public List<FileNodeDto> listFiles(GitConnectionRequestDto repo, String branch, String basePath) {
+        File tempDir = null;
+        try {
+            tempDir = Files.createTempDirectory("repo-list").toFile();
+            Git.cloneRepository()
+                    .setURI(repo.getRepoUrl())
+                    .setBranch(branch)
+                    .setDirectory(tempDir)
+                    .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
                     .call();
 
-            for (RevCommit commit : logs) {
-                result.add(new GitCommitDto(
-                        commit.getAuthorIdent().getName(),
-                        commit.getShortMessage(),
-                        commit.getAuthorIdent().getWhen().toString()
-                ));
+            File dir = new File(tempDir, basePath);
+            if (dir.exists() && dir.isDirectory()) {
+                return readChildrenRecursive(dir);
             }
 
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Ошибка при получении файлов: {}", e.getMessage());
         } finally {
-            if (tempDir != null) {
-                System.out.println("Временная папка не удалена (log): " + tempDir.getAbsolutePath());
-            }
+            if (tempDir != null) deleteDirectory(tempDir);
         }
-
-        return result;
-    }
-
-    public void pushFile(GitConnectionRequestDto repo, String branch, String folderPath, String filename, String content, String commitMessage) throws IOException, GitAPIException {
-        File tempDir = Files.createTempDirectory("repo-push").toFile();
-        try (Git git = Git.cloneRepository()
-                .setURI(repo.getRepoUrl())
-                .setBranch(branch)
-                .setDirectory(tempDir)
-                .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
-                .call()) {
-
-            File dir = new File(tempDir, folderPath);
-            if (!dir.exists()) {
-                if (!dir.mkdirs()) throw new IOException("Не удалось создать директорию " + folderPath);
-            }
-
-            File file = new File(dir, filename);
-            Files.writeString(file.toPath(), content, StandardCharsets.UTF_8);
-
-            git.add().addFilepattern(".").call();
-            git.commit().setMessage(commitMessage).call();
-            git.push().setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken())).call();
-
-        } finally {
-            deleteDirectory(tempDir);
-        }
+        return new ArrayList<>();
     }
 
     public List<String> listFolders(GitConnectionRequestDto repo, String branch, String basePath) {
@@ -155,30 +148,6 @@ public class GitWriterService {
         return result;
     }
 
-    public List<FileNodeDto> listFiles(GitConnectionRequestDto repo, String branch, String basePath) {
-        File tempDir = null;
-        try {
-            tempDir = Files.createTempDirectory("repo-list").toFile();
-            Git.cloneRepository()
-                    .setURI(repo.getRepoUrl())
-                    .setBranch(branch)
-                    .setDirectory(tempDir)
-                    .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
-                    .call();
-
-            File dir = new File(tempDir, basePath);
-            if (dir.exists() && dir.isDirectory()) {
-                return readChildrenRecursive(dir);
-            }
-
-        } catch (Exception e) {
-            log.error("Ошибка при получении файлов: {}", e.getMessage());
-        } finally {
-            if (tempDir != null) deleteDirectory(tempDir);
-        }
-        return new ArrayList<>();
-    }
-
     private List<FileNodeDto> readChildrenRecursive(File dir) {
         List<FileNodeDto> children = new ArrayList<>();
         File[] files = dir.listFiles();
@@ -189,50 +158,80 @@ public class GitWriterService {
                 children.add(new FileNodeDto(
                         file.getName(),
                         "folder",
+                        null,
                         readChildrenRecursive(file)
                 ));
             } else {
                 children.add(new FileNodeDto(
                         file.getName(),
                         "file",
-                        null
+                        null,
+                        new ArrayList<>()
                 ));
             }
         }
         return children;
     }
 
-    public FileEntryDto readEntry(GitConnectionRequestDto repo, String branch, String path) {
+    public List<GitCommitDto> getRecentCommits(GitConnectionRequestDto repo, String branch, String path, int limit) {
+        List<GitCommitDto> result = new ArrayList<>();
         File tempDir = null;
         try {
-            tempDir = Files.createTempDirectory("repo-entry").toFile();
-            Git.cloneRepository()
+            tempDir = Files.createTempDirectory("repo-log").toFile();
+            Git git = Git.cloneRepository()
                     .setURI(repo.getRepoUrl())
                     .setBranch(branch)
                     .setDirectory(tempDir)
                     .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
                     .call();
 
-            File target = new File(tempDir, path);
-            if (!target.exists()) {
-                return new FileEntryDto("missing", target.getName(), "# Файл или папка не найдены", null);
-            }
+            Iterable<RevCommit> logs = git.log()
+                    .addPath(path)
+                    .setMaxCount(limit)
+                    .call();
 
-            if (target.isDirectory()) {
-                List<FileNodeDto> children = readChildrenRecursive(target);
-                return new FileEntryDto("folder", target.getName(), null, children);
+            for (RevCommit commit : logs) {
+                result.add(new GitCommitDto(
+                        commit.getAuthorIdent().getName(),
+                        commit.getShortMessage(),
+                        commit.getAuthorIdent().getWhen().toString()
+                ));
             }
-
-            String content = Files.readString(target.toPath(), StandardCharsets.UTF_8);
-            return new FileEntryDto("file", target.getName(), content, null);
 
         } catch (Exception e) {
-            log.error("Ошибка при чтении entry: {}", e.getMessage());
-            return new FileEntryDto("error", "", "# ошибка при чтении", null);
+            log.error("Ошибка при получении коммитов: {}", e.getMessage());
         } finally {
             if (tempDir != null) {
-                deleteDirectory(tempDir);
+                System.out.println("Временная папка не удалена (log): " + tempDir.getAbsolutePath());
             }
+        }
+
+        return result;
+    }
+
+    public void pushFile(GitConnectionRequestDto repo, String branch, String folderPath, String filename, String content, String commitMessage) throws IOException, GitAPIException {
+        File tempDir = Files.createTempDirectory("repo-push").toFile();
+        try (Git git = Git.cloneRepository()
+                .setURI(repo.getRepoUrl())
+                .setBranch(branch)
+                .setDirectory(tempDir)
+                .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                .call()) {
+
+            File dir = new File(tempDir, folderPath);
+            if (!dir.exists() && !dir.mkdirs()) {
+                throw new IOException("Не удалось создать директорию " + folderPath);
+            }
+
+            File file = new File(dir, filename);
+            Files.writeString(file.toPath(), content, StandardCharsets.UTF_8);
+
+            git.add().addFilepattern(".").call();
+            git.commit().setMessage(commitMessage).call();
+            git.push().setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken())).call();
+
+        } finally {
+            deleteDirectory(tempDir);
         }
     }
 
@@ -247,10 +246,8 @@ public class GitWriterService {
                 .call()) {
 
             File newFolder = new File(tempDir, folderPath);
-            if (!newFolder.exists()) {
-                if (!newFolder.mkdirs()) {
-                    throw new IOException("Не удалось создать директорию: " + folderPath);
-                }
+            if (!newFolder.exists() && !newFolder.mkdirs()) {
+                throw new IOException("Не удалось создать директорию: " + folderPath);
             }
 
             File gitkeep = new File(newFolder, ".gitkeep");

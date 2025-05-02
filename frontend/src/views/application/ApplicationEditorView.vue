@@ -6,8 +6,9 @@
         <button @click="showNewFolderDialog = true">📁 Папка</button>
       </div>
       <FileTreeNode
-          v-if="rootEntry"
-          :node="rootEntry"
+          v-for="child in rootEntry?.children || []"
+          :key="child.fullPath"
+          :node="child"
           @open-file="loadEntry"
       />
     </div>
@@ -122,9 +123,13 @@ const enrichEntry = (entry, parentPath) => {
   entry.fullPath = parentPath ? `${parentPath}/${entry.name}` : entry.name
   entry.fullPath = entry.fullPath.replace(/\/+/g, '/')
   if (entry.children) {
-    entry.children = entry.children.map(child =>
-        enrichEntry(child, entry.fullPath)
-    )
+    entry.children = entry.children
+        .map(child => enrichEntry(child, entry.fullPath))
+        .sort((a, b) => {
+          if (a.type === 'folder' && b.type !== 'folder') return -1
+          if (a.type !== 'folder' && b.type === 'folder') return 1
+          return a.name.localeCompare(b.name)
+        })
   }
   return entry
 }

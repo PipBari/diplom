@@ -65,13 +65,13 @@ public class GitWriterController {
     }
 
     @GetMapping("/{name}/branch/{branch}/entry")
-    public ResponseEntity<FileEntryDto> getEntry(
+    public ResponseEntity<FileNodeDto> getEntry(
             @PathVariable String name,
             @PathVariable String branch,
             @RequestParam String path
     ) {
         GitConnectionRequestDto repo = gitService.getByName(name);
-        FileEntryDto entry = gitWriterService.readEntry(repo, branch, path);
+        FileNodeDto entry = gitWriterService.readEntry(repo, branch, path);
         return ResponseEntity.ok(entry);
     }
 
@@ -95,8 +95,6 @@ public class GitWriterController {
                 ValidationRequestDto validationRequest = new ValidationRequestDto(fullPath, request.getContent());
                 ValidationResultDto result = validationService.validate(type, validationRequest);
                 if (!result.isValid()) {
-                    System.out.println("Валидация не прошла для файла: " + fullPath);
-                    System.out.println("Ошибка: " + result.getOutput());
                     return ResponseEntity.badRequest().body(result);
                 }
             }
@@ -110,11 +108,9 @@ public class GitWriterController {
                     request.getCommitMessage()
             );
 
-            System.out.println("✅ Файл сохранён: " + fullPath);
             return ResponseEntity.ok(new ValidationResultDto(true, "Файл сохранён в Git"));
 
         } catch (IOException | GitAPIException e) {
-            e.printStackTrace();
             return ResponseEntity.status(500)
                     .body(new ValidationResultDto(false, "Ошибка при сохранении: " + e.getMessage()));
         }
