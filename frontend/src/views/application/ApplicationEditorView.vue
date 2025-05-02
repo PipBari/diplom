@@ -1,26 +1,24 @@
 <template>
   <div class="editor-layout">
-    <div class="file-tree">
-      <div class="file-tree-actions">
-        <button @click="showNewFileDialog = true">+ Файл</button>
-        <button @click="showNewFolderDialog = true">📁 Папка</button>
-      </div>
+    <div class="file-tree" @contextmenu.prevent="showContextMenu($event, null)">
       <FileTreeNode
           v-for="child in rootEntry?.children || []"
           :key="child.fullPath"
           :node="child"
+          :fullPath="child.fullPath"
+          :depth="0"
           @open-file="loadEntry"
+          @context-menu="showContextMenu"
       />
     </div>
 
     <div class="editor-pane">
       <div class="commit-header" v-if="commits.length > 0">
         <div class="commit-main">
-          <span class="commit-message">💬 {{ commits[0].message }}</span>
-          <span class="commit-meta"> — {{ commits[0].author }}, {{ formatDate(commits[0].date) }}</span>
+          💬 {{ commits[0].message }} — {{ commits[0].author }}, {{ formatDate(commits[0].date) }}
         </div>
-        <details class="commit-history">
-          <summary>История коммитов</summary>
+        <details>
+          <summary>▶ История коммитов</summary>
           <ul>
             <li v-for="c in commits" :key="c.date">
               <b>{{ formatDate(c.date) }}</b> — {{ c.author }}: {{ c.message }}
@@ -43,6 +41,16 @@
       <div v-if="validationTip" class="tip-block">💡 {{ validationTip }}</div>
       <div v-if="validationStatus" class="status-block">{{ validationStatus }}</div>
       <div v-if="validationError" class="error-block">❌ {{ validationError }}</div>
+    </div>
+
+    <!-- Контекстное меню -->
+    <div
+        v-if="contextMenu.visible"
+        class="context-menu"
+        :style="{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }"
+    >
+      <div class="context-item" @click="openNewFileDialog">📄 Новый файл</div>
+      <div class="context-item" @click="openNewFolderDialog">📁 Новая папка</div>
     </div>
 
     <!-- Новый файл -->
@@ -88,13 +96,14 @@ const currentFileContent = ref(null)
 
 const showNewFileDialog = ref(false)
 const showNewFolderDialog = ref(false)
-
 const newFileName = ref('')
 const newFolderName = ref('')
 
 const validationError = ref(null)
 const validationStatus = ref(null)
 const validationTip = ref(null)
+
+const contextMenu = ref({ visible: false, x: 0, y: 0 })
 
 const formatDate = (raw) => {
   const normalized = raw.replace('MSK', '+03:00')
@@ -110,6 +119,7 @@ onMounted(async () => {
   const reposRes = await api.get('/settings/git')
   repo.value = reposRes.data.find(r => r.name === app.value.repoName)
   await refreshTree()
+  document.addEventListener('click', () => (contextMenu.value.visible = false))
 })
 
 const refreshTree = async () => {
@@ -136,7 +146,6 @@ const enrichEntry = (entry, parentPath) => {
 
 const loadEntry = async (path) => {
   if (!path || path.endsWith('/')) return
-
   try {
     const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/file`, {
       params: { path }
@@ -204,6 +213,24 @@ const setTip = (filename) => {
   else validationTip.value = null
 }
 
+const openNewFileDialog = () => {
+  showNewFileDialog.value = true
+  contextMenu.value.visible = false
+}
+const openNewFolderDialog = () => {
+  showNewFolderDialog.value = true
+  contextMenu.value.visible = false
+}
+
+const showContextMenu = (event, node) => {
+  contextMenu.value = {
+    visible: true,
+    x: event.clientX,
+    y: event.clientY,
+    node
+  }
+}
+
 const createNewFile = () => {
   const name = newFileName.value.trim()
   if (!name) {
@@ -231,5 +258,3 @@ const createNewFolder = async () => {
   await refreshTree()
 }
 </script>
-
-<style src="@/assets/styles/application/ApplicationEditorView.css"></style>
