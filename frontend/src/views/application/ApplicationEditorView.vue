@@ -42,6 +42,7 @@
       <div class="editor-header">
         <span>{{ currentFileName || 'Выберите файл' }}</span>
         <button v-if="currentFileContent !== null" @click="saveFile">Сохранить</button>
+        <button v-if="serverInfo" @click="generateGitflow">Gitflow 🚀</button>
       </div>
 
       <textarea
@@ -197,6 +198,15 @@ const formatDate = (raw) => {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit'
   })
+}
+
+const generateGitflow = async () => {
+  try {
+    const res = await api.post(`/applications/${app.value.name}/gitflow`)
+    addToast(res.data, 'success')
+  } catch (e) {
+    addToast(e.response?.data || 'Ошибка при генерации gitflow', 'error')
+  }
 }
 
 const refreshTree = async () => {
