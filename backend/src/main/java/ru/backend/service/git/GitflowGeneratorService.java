@@ -13,6 +13,7 @@ import ru.backend.rest.settings.dto.ServersDto;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Properties;
 
@@ -178,14 +179,29 @@ public class GitflowGeneratorService {
 
             executeCommand(session, "mkdir -p " + remoteDir);
 
-            String escaped = scriptContent.replace("\\", "\\\\")
-                    .replace("$", "\\$")
-                    .replace("\"", "\\\"")
-                    .replace("", "\\");
+            String remoteScriptPath = remoteDir + "/deploy.sh";
+            String command = "cat > " + remoteScriptPath + " && chmod +x " + remoteScriptPath;
 
-            String command = "echo \"" + escaped + "\" > " + remoteDir + "/deploy.sh && chmod +x " + remoteDir + "/deploy.sh";
-            executeCommand(session, command);
+            ChannelExec channel = (ChannelExec) session.openChannel("exec");
+            channel.setCommand(command);
+            channel.setInputStream(null);
+            channel.setErrStream(System.err);
+            OutputStream out = channel.getOutputStream();
+            channel.connect();
 
+            out.write(scriptContent.getBytes(StandardCharsets.UTF_8));
+            out.flush();
+            out.close();
+
+            while (!channel.isClosed()) {
+                Thread.sleep(100);
+            }
+
+            if (channel.getExitStatus() != 0) {
+                throw new RuntimeException("Ошибка выполнения команды для deploy.sh");
+            }
+
+            channel.disconnect();
             session.disconnect();
         } catch (Exception e) {
             throw new RuntimeException("Ошибка при отправке deploy.sh на сервер: " + e.getMessage(), e);
