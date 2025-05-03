@@ -22,6 +22,15 @@ public class ServersController {
         return ResponseEntity.ok(serverService.getAll());
     }
 
+    @GetMapping("/{name}")
+    public ResponseEntity<ServersDto> getByName(@PathVariable String name) {
+        return serverService.getAll().stream()
+                .filter(s -> s.getName().equals(name))
+                .findFirst()
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @PostMapping("/{name}/status")
     public ResponseEntity<String> recheckStatus(@PathVariable String name) {
         String updatedStatus = serverService.recheckStatus(name);
@@ -35,9 +44,13 @@ public class ServersController {
     }
 
     @PostMapping("/{name}/update-load")
-    public ResponseEntity<String> updateLoad(@PathVariable String name) {
+    public ResponseEntity<ServersDto> updateLoad(@PathVariable String name) {
         serverService.updateServerLoad(name);
-        return ResponseEntity.ok("Нагрузка обновлена");
+        return serverService.getAll().stream()
+                .filter(s -> s.getName().equals(name))
+                .findFirst()
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @DeleteMapping("/{name}")

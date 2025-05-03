@@ -12,6 +12,7 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -31,12 +32,26 @@ public class TemplateValidationService {
     }
 
     public ValidationResultDto validateTerraform(ValidationRequestDto request) {
+        File tempDir = null;
         try {
-            File tempDir = Files.createTempDirectory("tf-validate").toFile();
+            tempDir = Files.createTempDirectory("tf-validate").toFile();
             File tfFile = new File(tempDir, "main.tf");
             Files.writeString(tfFile.toPath(), request.getContent());
 
-            log.info("[Terraform] Temp path: {}", tempDir.getAbsolutePath());
+            ProcessBuilder fmt = new ProcessBuilder(
+                    "docker", "run", "--rm",
+                    "-v", tempDir.getAbsolutePath() + ":/data",
+                    "hashicorp/terraform:light",
+                    "fmt", "-check", "-no-color", "/data/main.tf"
+            );
+            Process fmtProcess = fmt.start();
+            fmtProcess.waitFor(10, TimeUnit.SECONDS);
+            String fmtOutput = new String(fmtProcess.getInputStream().readAllBytes());
+            String fmtError = new String(fmtProcess.getErrorStream().readAllBytes());
+
+            if (fmtProcess.exitValue() != 0) {
+                return new ValidationResultDto(false, "Terraform fmt: форматирование не соответствует стилю", List.of(fmtOutput + fmtError));
+            }
 
             ProcessBuilder init = new ProcessBuilder(
                     "docker", "run", "--rm",
@@ -45,7 +60,6 @@ public class TemplateValidationService {
                     "hashicorp/terraform:light",
                     "init", "-backend=false"
             );
-            init.directory(tempDir);
             Process initProcess = init.start();
             initProcess.waitFor(15, TimeUnit.SECONDS);
 
@@ -54,81 +68,103 @@ public class TemplateValidationService {
                     "-v", tempDir.getAbsolutePath() + ":/data",
                     "-e", "TF_IN_AUTOMATION=1",
                     "hashicorp/terraform:light",
-                    "validate"
+                    "validate", "-no-color"
             );
-            validate.directory(tempDir);
             Process process = validate.start();
 
             boolean finished = process.waitFor(20, TimeUnit.SECONDS);
             String stderr = new String(process.getErrorStream().readAllBytes());
             String stdout = new String(process.getInputStream().readAllBytes());
 
-            log.info("[Terraform] Exit code: {}", process.exitValue());
-            log.debug("[Terraform] STDOUT:\n{}", stdout);
-            log.debug("[Terraform] STDERR:\n{}", stderr);
-
             if (!finished) {
-                return new ValidationResultDto(false, "Таймаут terraform validate");
+                return new ValidationResultDto(false, "Таймаут terraform validate", List.of());
             }
 
             if (process.exitValue() != 0) {
                 if (stderr.contains("Missing required provider")) {
-                    return new ValidationResultDto(true, "Провайдеры отсутствуют, требуется `terraform init`.");
+                    return new ValidationResultDto(true, "Провайдеры отсутствуют, требуется `terraform init`.", List.of(stderr + stdout));
                 }
-                return new ValidationResultDto(false, "Ошибка Terraform:\n" + stderr + stdout);
+                return new ValidationResultDto(false, "Terraform ошибка", List.of(stderr + stdout));
             }
 
             return new ValidationResultDto(true, "Terraform: OK");
 
         } catch (Exception e) {
             log.error("Terraform validation failed", e);
-            return new ValidationResultDto(false, "Terraform ошибка: " + e.getMessage());
+            return new ValidationResultDto(false, "Terraform ошибка: " + e.getMessage(), List.of());
+        } finally {
+            if (tempDir != null) {
+                deleteDirectory(tempDir);
+            }
         }
     }
 
     public ValidationResultDto validateAnsible(ValidationRequestDto request) {
+        File tempDir = null;
         try {
             try (InputStream is = new ByteArrayInputStream(request.getContent().getBytes())) {
                 new ObjectMapper(new YAMLFactory()).readTree(is);
             } catch (Exception yamlError) {
-                return new ValidationResultDto(false, "YAML ошибка: " + yamlError.getMessage());
+                return new ValidationResultDto(false, "YAML ошибка", List.of(yamlError.getMessage()));
             }
 
-            File tempDir = Files.createTempDirectory("ansible-validate").toFile();
+            tempDir = Files.createTempDirectory("ansible-validate").toFile();
             File ymlFile = new File(tempDir, "playbook.yml");
             Files.writeString(ymlFile.toPath(), request.getContent());
 
-            log.info("[Ansible] Temp path: {}", tempDir.getAbsolutePath());
+            ProcessBuilder syntaxCheck = new ProcessBuilder(
+                    "docker", "run", "--rm",
+                    "-v", tempDir.getAbsolutePath() + ":/data",
+                    "willhallonline/ansible:latest",
+                    "ansible-playbook", "--syntax-check", "/data/playbook.yml"
+            );
+            Process syntaxProcess = syntaxCheck.start();
+            boolean syntaxFinished = syntaxProcess.waitFor(20, TimeUnit.SECONDS);
+            String syntaxOut = new String(syntaxProcess.getInputStream().readAllBytes());
+            String syntaxErr = new String(syntaxProcess.getErrorStream().readAllBytes());
 
-            ProcessBuilder pb = new ProcessBuilder(
+            if (!syntaxFinished || syntaxProcess.exitValue() != 0) {
+                return new ValidationResultDto(false, "Ansible syntax-check ошибка", List.of(syntaxOut + syntaxErr));
+            }
+
+            ProcessBuilder lint = new ProcessBuilder(
                     "docker", "run", "--rm",
                     "-v", tempDir.getAbsolutePath() + ":/data",
                     "cytopia/ansible-lint",
                     "/data/playbook.yml"
             );
+            Process lintProcess = lint.start();
+            boolean lintFinished = lintProcess.waitFor(20, TimeUnit.SECONDS);
+            String lintOut = new String(lintProcess.getInputStream().readAllBytes());
+            String lintErr = new String(lintProcess.getErrorStream().readAllBytes());
 
-            Process process = pb.start();
-            boolean finished = process.waitFor(20, TimeUnit.SECONDS);
-            String stderr = new String(process.getErrorStream().readAllBytes());
-            String stdout = new String(process.getInputStream().readAllBytes());
-
-            log.info("[Ansible] Exit code: {}", process.exitValue());
-            log.debug("[Ansible] STDOUT:\n{}", stdout);
-            log.debug("[Ansible] STDERR:\n{}", stderr);
-
-            if (!finished) {
-                return new ValidationResultDto(false, "Таймаут ansible-lint");
+            if (!lintFinished) {
+                return new ValidationResultDto(false, "Таймаут ansible-lint", List.of());
             }
 
-            if (process.exitValue() != 0) {
-                return new ValidationResultDto(false, "Ansible-lint:\n" + stdout + stderr);
+            if (lintProcess.exitValue() != 0) {
+                return new ValidationResultDto(false, "Ansible-lint ошибка", List.of(lintOut + lintErr));
             }
 
-            return new ValidationResultDto(true, "Ansible-lint: OK");
+            return new ValidationResultDto(true, "Ansible: OK");
 
         } catch (Exception e) {
             log.error("Ansible validation failed", e);
-            return new ValidationResultDto(false, "Ansible-lint ошибка: " + e.getMessage());
+            return new ValidationResultDto(false, "Ansible ошибка: " + e.getMessage(), List.of());
+        } finally {
+            if (tempDir != null) {
+                deleteDirectory(tempDir);
+            }
         }
+    }
+
+    private void deleteDirectory(File directory) {
+        File[] allContents = directory.listFiles();
+        if (allContents != null) {
+            for (File file : allContents) {
+                deleteDirectory(file);
+            }
+        }
+        directory.delete();
     }
 }

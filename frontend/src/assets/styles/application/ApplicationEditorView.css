@@ -247,3 +247,58 @@
     cursor: pointer;
     font-size: 16px;
 }
+.toast-container {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    z-index: 9999;
+}
+
+.toast {
+    padding: 0.75rem 1.25rem;
+    border-radius: 4px;
+    color: #fff;
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    min-width: 200px;
+}
+
+.toast.success {
+    background-color: #4caf50;
+}
+
+.toast.error {
+    background-color: #e53935;
+}
+
+.server-status-inline {
+    background: #f7f7f7;
+    padding: 10px 16px;
+    margin-bottom: 1rem;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #333;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.status-success {
+    color: #4caf50;
+    margin: 0 4px;
+}
+
+.status-failed {
+    color: #e53935;
+    margin: 0 4px;
+}
+
+.status-unknown {
+    color: #999;
+    margin: 0 4px;
+}

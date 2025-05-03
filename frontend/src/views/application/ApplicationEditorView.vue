@@ -13,12 +13,16 @@
     </div>
 
     <div class="editor-pane">
+      <div v-if="serverInfo" class="server-status-inline">
+        <strong>Сервер:</strong> {{ serverInfo.name }} —
+        <strong>Статус:</strong>
+        <span :class="getStatusClass(serverInfo.status)">●</span> {{ serverInfo.status }} —
+        <strong>CPU:</strong> {{ serverInfo.cpu || '—' }} —
+        <strong>RAM:</strong> {{ formatRam(serverInfo.ram) }}
+      </div>
+
       <div class="commit-header" v-if="commits.length > 0">
-        <div
-            class="commit-main-wrapper"
-            @mouseenter="showCommitHistory = true"
-            @mouseleave="showCommitHistory = false"
-        >
+        <div class="commit-main-wrapper" @mouseenter="showCommitHistory = true" @mouseleave="showCommitHistory = false">
           💬 {{ commits[0].message }} — {{ commits[0].author }}, {{ formatDate(commits[0].date) }}
           <div class="commit-popup" v-if="showCommitHistory">
             <ul>
@@ -45,10 +49,6 @@
           v-model="currentFileContent"
           class="editor-textarea"
       />
-
-      <div v-if="validationTip" class="tip-block">💡 {{ validationTip }}</div>
-      <div v-if="validationStatus" class="status-block">{{ validationStatus }}</div>
-      <div v-if="validationError" class="error-block">❌ {{ validationError }}</div>
     </div>
 
     <div
@@ -58,13 +58,7 @@
     >
       <div class="context-item" @click="openNewFileDialog">📄 Новый файл</div>
       <div class="context-item" @click="openNewFolderDialog">📁 Новая папка</div>
-      <div
-          v-if="contextMenu.node"
-          class="context-item"
-          @click="openRenameDialog"
-      >
-        ✏️ Переименовать
-      </div>
+      <div v-if="contextMenu.node" class="context-item" @click="openRenameDialog">✏️ Переименовать</div>
       <div
           v-if="contextMenu.node && canDelete(contextMenu.node.name)"
           class="context-item danger"
@@ -99,32 +93,37 @@
     <div v-if="showRenameDialog" class="overlay" @click.self="showRenameDialog = false">
       <div class="dialog">
         <h3>Переименовать</h3>
-        <input
-            v-model="renameNewName"
-            :placeholder="contextMenu.node?.name"
-            @keyup.enter="renameEntry"
-        />
+        <input v-model="renameNewName" :placeholder="contextMenu.node?.name" @keyup.enter="renameEntry" />
         <div class="dialog-actions">
           <button @click="renameEntry">Переименовать</button>
           <button @click="showRenameDialog = false">Отмена</button>
         </div>
       </div>
     </div>
+
+    <div class="toast-container">
+      <div v-for="(toast, index) in toasts" :key="index" class="toast" :class="toast.type">
+        {{ toast.message }}
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import {ref, onMounted} from 'vue'
-import {useRoute} from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import api from '@/api/axios'
 import FileTreeNode from '@/components/FileTreeNode.vue'
 import '@/assets/styles/application/ApplicationEditorView.css'
+
+const server = ref(null)
 
 const route = useRoute()
 const app = ref({})
 const repo = ref({})
 const rootEntry = ref(null)
 const commits = ref([])
+const serverInfo = ref(null)
 
 const currentFileName = ref('')
 const currentFileContent = ref(null)
@@ -137,20 +136,58 @@ const newFileName = ref('')
 const newFolderName = ref('')
 const renameNewName = ref('')
 
-const validationError = ref(null)
-const validationStatus = ref(null)
-const validationTip = ref(null)
-
-const contextMenu = ref({visible: false, x: 0, y: 0, node: null})
-
+const contextMenu = ref({ visible: false, x: 0, y: 0, node: null })
 const showCommitHistory = ref(false)
+
+const toasts = ref([])
+const addToast = (message, type = 'success') => {
+  const id = Date.now()
+  toasts.value.push({ id, message, type })
+  setTimeout(() => {
+    toasts.value = toasts.value.filter(t => t.id !== id)
+  }, 3000)
+}
+
+const getStatusClass = (status) => {
+  return {
+    Successful: 'status-success',
+    Failed: 'status-failed',
+    Unknown: 'status-unknown'
+  }[status] || 'status-unknown'
+}
+
+const formatRam = (raw) => {
+  if (!raw) return '—'
+  const [used, total] = raw.split('/')
+  return `${used.trim()} / ${total.trim()}`
+}
 
 onMounted(async () => {
   const appsRes = await api.get('/applications')
   app.value = appsRes.data.find(a => a.name === route.params.name)
+
+  const serversRes = await api.get('/settings/servers')
+  server.value = serversRes.data.find(s => s.name === app.value.serverName)
+
+  if (app.value?.serverName) {
+    serverInfo.value = serversRes.data.find(s => s.name === app.value.serverName)
+
+    setInterval(async () => {
+      try {
+        const updatedServers = await api.get('/settings/servers')
+        const updatedInfo = updatedServers.data.find(s => s.name === app.value.serverName)
+        if (updatedInfo) serverInfo.value = updatedInfo
+      } catch (err) {
+        console.error('Ошибка при автообновлении serverInfo:', err)
+      }
+    }, 60000)
+  }
+
   const reposRes = await api.get('/settings/git')
   repo.value = reposRes.data.find(r => r.name === app.value.repoName)
+
   await refreshTree()
+
   document.addEventListener('click', () => (contextMenu.value.visible = false))
 })
 
@@ -164,7 +201,7 @@ const formatDate = (raw) => {
 
 const refreshTree = async () => {
   const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/entry`, {
-    params: {path: app.value.path}
+    params: { path: app.value.path }
   })
   rootEntry.value = enrichEntry(res.data, '')
 }
@@ -188,14 +225,13 @@ const loadEntry = async (path) => {
   if (!path || path.endsWith('/')) return
   try {
     const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/file`, {
-      params: {path}
+      params: { path }
     })
     currentFileContent.value = res.data
     currentFileName.value = path
     await loadCommits(path)
-    setTip(path)
   } catch (e) {
-    validationError.value = 'Ошибка при загрузке файла'
+    addToast('Ошибка при загрузке файла', 'error')
     currentFileContent.value = null
     currentFileName.value = ''
   }
@@ -204,7 +240,7 @@ const loadEntry = async (path) => {
 const loadCommits = async (path) => {
   try {
     const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/commits`, {
-      params: {path, limit: 5}
+      params: { path, limit: 5 }
     })
     commits.value = res.data
   } catch {
@@ -215,29 +251,35 @@ const loadCommits = async (path) => {
 const saveFile = async () => {
   const filename = currentFileName.value
   const type = detectType(filename)
-  validationStatus.value = '🔄 Проверка синтаксиса...'
-  validationError.value = null
 
   if (type) {
-    const res = await api.post(`/validate/${type}`, {
-      path: filename,
-      content: currentFileContent.value
-    })
-    if (!res.data.valid) {
-      validationError.value = res.data.output
-      validationStatus.value = '❌ Ошибка валидации'
+    try {
+      const res = await api.post(`/validate/${type}`, {
+        path: filename,
+        content: currentFileContent.value
+      })
+
+      if (!res.data.valid) {
+        addToast(res.data.output, 'error')
+        return
+      }
+    } catch (e) {
+      addToast(e.response?.data?.message || e.message, 'error')
       return
     }
-    validationStatus.value = '✅ Синтаксис корректен'
   }
 
-  await api.post(`/git/writer/${repo.value.name}/branch/${app.value.branch}/save`, {
-    path: filename,
-    content: currentFileContent.value,
-    commitMessage: `Обновление файла ${filename}`
-  })
-
-  await refreshTree()
+  try {
+    const res = await api.post(`/git/writer/${repo.value.name}/branch/${app.value.branch}/save`, {
+      path: filename,
+      content: currentFileContent.value,
+      commitMessage: `Обновление файла ${filename}`
+    })
+    await refreshTree()
+    addToast(res.data.output || `Файл ${filename} сохранён`, 'success')
+  } catch (e) {
+    addToast(e.response?.data?.message || e.message, 'error')
+  }
 }
 
 const revertCommit = async (commit) => {
@@ -249,11 +291,11 @@ const revertCommit = async (commit) => {
       commitHash: commit.hash,
       commitMessage: `Revert: ${commit.message}`
     })
-    alert('Коммит успешно отменён')
+    addToast('Коммит отменён', 'success')
     await refreshTree()
     await loadCommits(currentFileName.value)
   } catch (e) {
-    alert('Ошибка при откате коммита')
+    addToast('Ошибка при откате коммита', 'error')
   }
 }
 
@@ -263,25 +305,22 @@ const detectType = (filename) => {
   return null
 }
 
-const setTip = (filename) => {
-  if (filename.endsWith('.tf')) validationTip.value = 'Terraform: будет применена terraform validate'
-  else if (filename.endsWith('.yml') || filename.endsWith('.yaml')) validationTip.value = 'Ansible: будет применён ansible-lint'
-  else validationTip.value = null
-}
-
 const openNewFileDialog = () => {
   showNewFileDialog.value = true
   contextMenu.value.visible = false
 }
+
 const openNewFolderDialog = () => {
   showNewFolderDialog.value = true
   contextMenu.value.visible = false
 }
+
 const openRenameDialog = () => {
   renameNewName.value = contextMenu.value.node?.name || ''
   showRenameDialog.value = true
   contextMenu.value.visible = false
 }
+
 const renameEntry = async () => {
   const newName = renameNewName.value.trim()
   const node = contextMenu.value.node
@@ -301,8 +340,9 @@ const renameEntry = async () => {
     })
     showRenameDialog.value = false
     await refreshTree()
+    addToast('Переименование успешно', 'success')
   } catch (e) {
-    validationError.value = 'Ошибка при переименовании'
+    addToast('Ошибка при переименовании', 'error')
   }
 }
 
@@ -322,19 +362,18 @@ const canDelete = (name) => {
 const createNewFile = () => {
   const name = newFileName.value.trim()
   if (!name) {
-    validationError.value = 'Имя файла не может быть пустым'
+    addToast('Имя файла не может быть пустым', 'error')
     return
   }
   currentFileName.value = `${app.value.path}/${name}`.replace(/\/+/g, '/')
   currentFileContent.value = ''
   showNewFileDialog.value = false
-  setTip(name)
 }
 
 const createNewFolder = async () => {
   const name = newFolderName.value.trim()
   if (!name) {
-    validationError.value = 'Имя папки не может быть пустым'
+    addToast('Имя папки не может быть пустым', 'error')
     return
   }
 
@@ -344,6 +383,7 @@ const createNewFolder = async () => {
   })
   showNewFolderDialog.value = false
   await refreshTree()
+  addToast('Папка создана', 'success')
 }
 
 const deletePath = async () => {
@@ -359,5 +399,6 @@ const deletePath = async () => {
   })
   contextMenu.value.visible = false
   await refreshTree()
+  addToast('Удалено', 'success')
 }
 </script>
