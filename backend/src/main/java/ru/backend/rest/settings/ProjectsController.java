@@ -33,4 +33,14 @@ public class ProjectsController {
         projectService.delete(name);
         return ResponseEntity.ok("Проект удалён");
     }
+
+    @PutMapping("/{name}")
+    public ResponseEntity<String> update(@PathVariable String name, @RequestBody ProjectDto project) {
+        try {
+            projectService.update(name, project);
+            return ResponseEntity.ok("Проект обновлён");
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
 }

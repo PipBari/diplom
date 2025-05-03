@@ -123,4 +123,23 @@ public class GitService {
         }
         return repo;
     }
+
+    public void update(String name, GitConnectionRequestDto updated) {
+        GitConnectionRequestDto existing = repoStorage.get(name);
+        if (existing == null) {
+            throw new NoSuchElementException("Репозиторий не найден: " + name);
+        }
+
+        if (updated.getRepoUrl() != null) existing.setRepoUrl(updated.getRepoUrl());
+        if (updated.getBranch() != null) existing.setBranch(updated.getBranch());
+        if (updated.getUsername() != null) existing.setUsername(updated.getUsername());
+        if (updated.getToken() != null) existing.setToken(updated.getToken());
+        if (updated.getType() != null) existing.setType(updated.getType());
+
+        String status = checkConnection(existing);
+        existing.setStatus(status);
+
+        repoStorage.put(name, existing);
+        saveToDisk();
+    }
 }

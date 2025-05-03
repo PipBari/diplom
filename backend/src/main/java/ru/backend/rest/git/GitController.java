@@ -6,6 +6,7 @@ import ru.backend.rest.git.dto.GitConnectionRequestDto;
 import ru.backend.service.git.GitService;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 
 @RestController
 @RequestMapping("/settings/git")
@@ -38,5 +39,15 @@ public class GitController {
     public ResponseEntity<String> recheckStatus(@PathVariable String name) {
         String updatedStatus = gitService.recheckStatus(name);
         return ResponseEntity.ok("Статус обновлён: " + updatedStatus);
+    }
+
+    @PutMapping("/{name}")
+    public ResponseEntity<String> update(@PathVariable String name, @RequestBody GitConnectionRequestDto request) {
+        try {
+            gitService.update(name, request);
+            return ResponseEntity.ok("Репозиторий обновлён");
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 }

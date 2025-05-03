@@ -1,11 +1,21 @@
 [ {
-  "name" : "final_version",
+  "name" : "tf-nl",
   "repoName" : "configs",
   "branch" : "master",
   "path" : "my-app",
-  "projectName" : "configs_new",
-  "serverName" : "test",
+  "projectName" : "tf_pr",
+  "serverName" : "nl_tf",
   "syncStrategy" : "auto",
-  "createdAt" : "2025-05-03T13:53:04.539Z",
+  "createdAt" : "2025-05-03T15:18:01.765Z",
+  "status" : "Synced"
+}, {
+  "name" : "tf_pr",
+  "repoName" : "configs",
+  "branch" : "master",
+  "path" : "my-app",
+  "projectName" : "tf_pr",
+  "serverName" : "tf_server",
+  "syncStrategy" : "auto",
+  "createdAt" : "2025-05-03T14:32:11.818Z",
   "status" : "Synced"
 } ]

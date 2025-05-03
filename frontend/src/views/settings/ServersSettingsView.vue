@@ -3,7 +3,7 @@
     <div class="breadcrumbs">Настройки / Серверы</div>
 
     <div class="top-bar">
-      <button @click="showForm = true">Добавить сервер</button>
+      <button @click="openCreateForm">Добавить сервер</button>
       <button @click="loadServers">Обновить список</button>
     </div>
 
@@ -17,7 +17,12 @@
     </div>
 
     <div v-if="servers.length">
-      <div v-for="server in servers" :key="server.name" class="repo-row">
+      <div
+          v-for="server in servers"
+          :key="server.name"
+          class="repo-row"
+          @click="editServer(server)"
+      >
         <div class="cell">{{ server.name }}</div>
         <div class="cell">{{ server.host }}</div>
         <div class="cell">{{ server.ram || '-' }}</div>
@@ -25,7 +30,7 @@
         <div class="cell">
           <span :class="statusClass(server.status)">{{ server.status || 'Unknown' }}</span>
         </div>
-        <div class="cell actions">
+        <div class="cell actions" @click.stop>
           <div class="dropdown">
             <button class="menu-btn" @click="toggleDropdown(server.name)">⋮</button>
             <div class="menu" v-if="openedMenu === server.name">
@@ -41,13 +46,13 @@
 
     <div v-if="showForm" class="side-panel">
       <div class="side-panel-header">
-        <span>Добавить сервер</span>
+        <span>{{ isEditMode ? 'Редактировать сервер' : 'Добавить сервер' }}</span>
         <button class="close-btn" @click="closeForm">×</button>
       </div>
       <div class="side-panel-content">
-        <form @submit.prevent="addServer">
+        <form @submit.prevent="saveServer">
           <label>Имя:</label>
-          <input v-model="form.name" required />
+          <input v-model="form.name" :readonly="isEditMode" required />
 
           <label>Хост:</label>
           <input v-model="form.host" required />
@@ -86,6 +91,8 @@ const form = ref({
 
 const servers = ref([])
 const showForm = ref(false)
+const isEditMode = ref(false)
+const editName = ref(null)
 const openedMenu = ref(null)
 let interval = null
 
@@ -98,13 +105,43 @@ const loadServers = async () => {
   }
 }
 
-const addServer = async () => {
+const openCreateForm = () => {
+  form.value = {
+    name: '',
+    host: '',
+    specify_username: '',
+    port: 22,
+    password: ''
+  }
+  isEditMode.value = false
+  editName.value = null
+  showForm.value = true
+}
+
+const editServer = (server) => {
+  form.value = {
+    name: server.name,
+    host: server.host,
+    specify_username: server.specify_username,
+    port: server.port,
+    password: ''
+  }
+  isEditMode.value = true
+  editName.value = server.name
+  showForm.value = true
+}
+
+const saveServer = async () => {
   try {
-    await api.post('/settings/servers', form.value)
-    showForm.value = false
+    if (isEditMode.value) {
+      await api.put(`/settings/servers/${editName.value}`, form.value)
+    } else {
+      await api.post('/settings/servers', form.value)
+    }
+    closeForm()
     await loadServers()
   } catch (e) {
-    console.error('Ошибка добавления сервера', e)
+    console.error('Ошибка сохранения сервера', e)
   }
 }
 
@@ -154,6 +191,15 @@ const toggleDropdown = (name) => {
 
 const closeForm = () => {
   showForm.value = false
+  isEditMode.value = false
+  editName.value = null
+  form.value = {
+    name: '',
+    host: '',
+    specify_username: '',
+    port: 22,
+    password: ''
+  }
 }
 
 onMounted(() => {

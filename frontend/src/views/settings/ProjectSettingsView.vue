@@ -3,7 +3,7 @@
     <div class="breadcrumbs">Настройки / Проекты</div>
 
     <div class="top-bar">
-      <button @click="showForm = true">Добавить проект</button>
+      <button @click="openCreateForm">Добавить проект</button>
       <button @click="loadProjects">Обновить список</button>
     </div>
 
@@ -13,10 +13,15 @@
     </div>
 
     <div v-if="projects.length">
-      <div v-for="project in projects" :key="project.name" class="repo-row">
+      <div
+          v-for="project in projects"
+          :key="project.name"
+          class="repo-row"
+          @click="editProject(project)"
+      >
         <div class="cell">{{ project.name }}</div>
         <div class="cell">{{ project.description }}</div>
-        <div class="cell actions">
+        <div class="cell actions" @click.stop>
           <div class="dropdown">
             <button class="menu-btn" @click="toggleDropdown(project.name)">⋮</button>
             <div class="menu" v-if="openedMenu === project.name">
@@ -30,20 +35,20 @@
 
     <div v-if="showForm" class="side-panel">
       <div class="side-panel-header">
-        <span>Добавить проект</span>
-        <button class="close-btn" @click="showForm = false">×</button>
+        <span>{{ isEditMode ? 'Редактировать проект' : 'Добавить проект' }}</span>
+        <button class="close-btn" @click="closeForm">×</button>
       </div>
       <div class="side-panel-content">
-        <form @submit.prevent="addProject">
+        <form @submit.prevent="saveProject">
           <label>Имя:</label>
-          <input v-model="form.name" required />
+          <input v-model="form.name" :readonly="isEditMode" required />
 
           <label>Описание:</label>
           <input v-model="form.description" />
 
           <div class="form-actions">
             <button type="submit">Сохранить</button>
-            <button type="button" @click="showForm = false">Отмена</button>
+            <button type="button" @click="closeForm">Отмена</button>
           </div>
         </form>
       </div>
@@ -63,6 +68,8 @@ const form = ref({
 
 const projects = ref([])
 const showForm = ref(false)
+const isEditMode = ref(false)
+const editName = ref(null)
 const openedMenu = ref(null)
 
 const loadProjects = async () => {
@@ -74,13 +81,31 @@ const loadProjects = async () => {
   }
 }
 
-const addProject = async () => {
+const openCreateForm = () => {
+  form.value = { name: '', description: '' }
+  isEditMode.value = false
+  editName.value = null
+  showForm.value = true
+}
+
+const editProject = (project) => {
+  form.value = { ...project }
+  isEditMode.value = true
+  editName.value = project.name
+  showForm.value = true
+}
+
+const saveProject = async () => {
   try {
-    await api.post('/settings/projects', form.value)
-    showForm.value = false
+    if (isEditMode.value) {
+      await api.put(`/settings/projects/${editName.value}`, form.value)
+    } else {
+      await api.post('/settings/projects', form.value)
+    }
+    closeForm()
     await loadProjects()
   } catch (e) {
-    console.error('Ошибка добавления', e)
+    console.error('Ошибка сохранения', e)
   }
 }
 
@@ -96,6 +121,13 @@ const removeProject = async (name) => {
 
 const toggleDropdown = (name) => {
   openedMenu.value = openedMenu.value === name ? null : name
+}
+
+const closeForm = () => {
+  showForm.value = false
+  isEditMode.value = false
+  editName.value = null
+  form.value = { name: '', description: '' }
 }
 
 onMounted(() => {

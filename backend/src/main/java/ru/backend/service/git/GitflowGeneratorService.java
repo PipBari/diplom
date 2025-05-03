@@ -181,7 +181,7 @@ public class GitflowGeneratorService {
             String escaped = scriptContent.replace("\\", "\\\\")
                     .replace("$", "\\$")
                     .replace("\"", "\\\"")
-                    .replace("`", "\\`");
+                    .replace("", "\\");
 
             String command = "echo \"" + escaped + "\" > " + remoteDir + "/deploy.sh && chmod +x " + remoteDir + "/deploy.sh";
             executeCommand(session, command);

@@ -70,4 +70,16 @@ public class ProjectService {
         projectStorage.remove(name);
         saveToDisk();
     }
+
+    public void update(String name, ProjectDto updated) {
+        ProjectDto existing = projectStorage.get(name);
+        if (existing == null) {
+            throw new IllegalArgumentException("Проект с именем '" + name + "' не найден");
+        }
+        if (updated.getDescription() != null) {
+            existing.setDescription(updated.getDescription());
+        }
+        projectStorage.put(name, existing);
+        saveToDisk();
+    }
 }

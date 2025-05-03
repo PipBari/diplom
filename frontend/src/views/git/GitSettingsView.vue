@@ -3,7 +3,7 @@
     <div class="breadcrumbs">Настройки / Репозитории</div>
 
     <div class="top-bar">
-      <button @click="showForm = true">Подключить репозиторий</button>
+      <button @click="openCreateForm">Подключить репозиторий</button>
       <button @click="loadRepos">Обновить список</button>
     </div>
 
@@ -17,17 +17,22 @@
     </div>
 
     <div v-if="repos.length">
-      <div v-for="repo in repos" :key="repo.name" class="repo-row">
+      <div
+          v-for="repo in repos"
+          :key="repo.name"
+          class="repo-row"
+          @click="editRepo(repo)"
+      >
         <div class="cell">{{ repo.type }}</div>
         <div class="cell">{{ repo.name || 'по умолчанию' }}</div>
         <div class="cell">{{ repo.branch }}</div>
         <div class="cell">
-          <a :href="repo.repoUrl" target="_blank">{{ repo.repoUrl }}</a>
+          <a :href="repo.repoUrl" target="_blank" @click.stop>{{ repo.repoUrl }}</a>
         </div>
         <div class="cell">
           <span :class="['status', statusClass(repo.status)]">{{ repo.status }}</span>
         </div>
-        <div class="cell actions">
+        <div class="cell actions" @click.stop>
           <div class="dropdown">
             <button class="menu-btn" @click="toggleDropdown(repo.name)">⋮</button>
             <div class="menu" v-if="openedMenu === repo.name">
@@ -42,13 +47,13 @@
 
     <div v-if="showForm" class="side-panel">
       <div class="side-panel-header">
-        <span>Добавить репозиторий</span>
-        <button class="close-btn" @click="showForm = false">×</button>
+        <span>{{ isEditMode ? 'Редактировать репозиторий' : 'Подключить репозиторий' }}</span>
+        <button class="close-btn" @click="closeForm">×</button>
       </div>
       <div class="side-panel-content">
-        <form @submit.prevent="addRepo">
+        <form @submit.prevent="saveRepo">
           <label>Имя:</label>
-          <input v-model="form.name" required />
+          <input v-model="form.name" :readonly="isEditMode" required />
 
           <label>Repo URL:</label>
           <input v-model="form.repoUrl" required />
@@ -64,7 +69,7 @@
 
           <div class="form-actions">
             <button type="submit">Сохранить</button>
-            <button type="button" @click="showForm = false">Отмена</button>
+            <button type="button" @click="closeForm">Отмена</button>
           </div>
         </form>
       </div>
@@ -75,7 +80,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api/axios'
-
 import '../../assets/styles/git/GitConnectStyle.css'
 
 const form = ref({
@@ -88,6 +92,8 @@ const form = ref({
 
 const repos = ref([])
 const showForm = ref(false)
+const isEditMode = ref(false)
+const editName = ref(null)
 const openedMenu = ref(null)
 
 const loadRepos = async () => {
@@ -99,13 +105,31 @@ const loadRepos = async () => {
   }
 }
 
-const addRepo = async () => {
+const openCreateForm = () => {
+  form.value = { name: '', repoUrl: '', branch: '', username: '', token: '' }
+  isEditMode.value = false
+  editName.value = null
+  showForm.value = true
+}
+
+const editRepo = (repo) => {
+  form.value = { ...repo }
+  isEditMode.value = true
+  editName.value = repo.name
+  showForm.value = true
+}
+
+const saveRepo = async () => {
   try {
-    await api.post('/settings/git', form.value)
-    showForm.value = false
+    if (isEditMode.value) {
+      await api.put(`/settings/git/${editName.value}`, form.value)
+    } else {
+      await api.post('/settings/git', form.value)
+    }
+    closeForm()
     await loadRepos()
   } catch (e) {
-    console.error('Ошибка добавления', e)
+    console.error('Ошибка сохранения', e)
   }
 }
 
@@ -139,9 +163,15 @@ const toggleDropdown = (name) => {
   openedMenu.value = openedMenu.value === name ? null : name
 }
 
+const closeForm = () => {
+  showForm.value = false
+  isEditMode.value = false
+  editName.value = null
+  form.value = { name: '', repoUrl: '', branch: '', username: '', token: '' }
+}
+
 onMounted(() => {
   loadRepos()
-
   window.addEventListener('click', (e) => {
     if (!e.target.closest('.dropdown')) {
       openedMenu.value = null

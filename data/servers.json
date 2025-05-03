@@ -1,10 +1,28 @@
 [ {
+  "name" : "nl_tf",
+  "host" : "85.92.108.64",
+  "specify_username" : "root",
+  "port" : 22,
+  "password" : "pp_jTE#Nv4TLkg",
+  "status" : "Successful",
+  "cpu" : "3.2%",
+  "ram" : "218 МБ / 3911 МБ"
+}, {
   "name" : "test",
   "host" : "89.179.242.33",
   "specify_username" : "ubuntu",
   "port" : 22,
   "password" : "WiGtF2BE!",
   "status" : "Successful",
-  "cpu" : "6%",
-  "ram" : "1449 МБ / 19994 МБ"
+  "cpu" : "10%",
+  "ram" : "1411 МБ / 19994 МБ"
+}, {
+  "name" : "tf_server",
+  "host" : "217.198.12.119",
+  "specify_username" : "root",
+  "port" : 22,
+  "password" : "yi5XLf?J*_U+NZ",
+  "status" : "Error",
+  "cpu" : "-",
+  "ram" : "-"
 } ]

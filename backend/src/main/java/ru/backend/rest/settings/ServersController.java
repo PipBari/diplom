@@ -6,6 +6,7 @@ import ru.backend.rest.settings.dto.ServersDto;
 import ru.backend.service.settings.ServersService;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 
 @RestController
 @RequestMapping("/settings/servers")
@@ -29,6 +30,16 @@ public class ServersController {
                 .findFirst()
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PutMapping("/{name}")
+    public ResponseEntity<String> update(@PathVariable String name, @RequestBody ServersDto updated) {
+        try {
+            serverService.update(name, updated);
+            return ResponseEntity.ok("Сервер обновлён");
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 
     @PostMapping("/{name}/status")

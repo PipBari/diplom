@@ -78,6 +78,24 @@ public class ServersService {
         saveToDisk();
     }
 
+    public void update(String name, ServersDto updated) {
+        ServersDto existing = serverStorage.get(name);
+        if (existing == null) {
+            throw new NoSuchElementException("Сервер не найден: " + name);
+        }
+
+        if (updated.getHost() != null) existing.setHost(updated.getHost());
+        if (updated.getSpecify_username() != null) existing.setSpecify_username(updated.getSpecify_username());
+        if (updated.getPort() != 0) existing.setPort(updated.getPort());
+        if (updated.getPassword() != null) existing.setPassword(updated.getPassword());
+
+        existing.setStatus(checkConnection(existing));
+        updateServerLoad(existing.getName());
+
+        serverStorage.put(name, existing);
+        saveToDisk();
+    }
+
     public String recheckStatus(String name) {
         ServersDto server = serverStorage.get(name);
         if (server == null) return "Unknown";

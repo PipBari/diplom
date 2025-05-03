@@ -15,9 +15,17 @@ public class ServerMonitoringScheduler {
 
     @Scheduled(fixedRate = 60000)
     public void updateServerMetrics() {
-        log.info("Обновление нагрузки всех серверов");
-        serversService.getAll().forEach(server ->
-                serversService.updateServerLoad(server.getName())
-        );
+        log.info("Проверка статуса и обновление нагрузки всех серверов");
+        serversService.getAll().forEach(server -> {
+            String name = server.getName();
+            String newStatus = serversService.recheckStatus(name);
+
+            if ("Successful".equals(newStatus)) {
+                serversService.updateServerLoad(name);
+            } else {
+                server.setCPU("-");
+                server.setRAM("-");
+            }
+        });
     }
 }
