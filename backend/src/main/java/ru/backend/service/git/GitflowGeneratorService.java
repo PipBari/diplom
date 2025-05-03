@@ -22,14 +22,15 @@ public class GitflowGeneratorService {
 
     private final GitWriterService gitWriterService;
 
-    public void generate(ApplicationDto app, ServersDto server, GitConnectionRequestDto repo) throws IOException, GitAPIException {
+    public void generate(ApplicationDto app, ServersDto server, GitConnectionRequestDto repo)
+            throws IOException, GitAPIException {
+
         String appPath = app.getPath();
         String branch = app.getBranch();
         String remoteDir = "/home/" + server.getSpecify_username() + "/apps/" + app.getName();
 
         List<FileNodeDto> files = gitWriterService.listFiles(repo, branch, appPath);
-        String deployScriptContent = generateDynamicDeploySh(app, server, files);
-
+        String deployScriptContent = generateDeploySh(app, server, files, repo);
         gitWriterService.pushFile(
                 repo,
                 branch,
@@ -52,25 +53,45 @@ public class GitflowGeneratorService {
         uploadDeployScriptToServer(remoteDir, server, deployScriptContent);
     }
 
-    private String generateDynamicDeploySh(ApplicationDto app, ServersDto server, List<FileNodeDto> files) {
+    private String generateDeploySh(ApplicationDto app, ServersDto server, List<FileNodeDto> files, GitConnectionRequestDto repo) {
         String appDir = "/home/" + server.getSpecify_username() + "/apps/" + app.getName();
+        String repoUrl = repo.getRepoUrl();
+        String repoPath = repoUrl.replace("https://github.com/", "").replace(".git", "");
 
         boolean hasTerraform = files.stream().anyMatch(f -> f.getName().endsWith(".tf"));
         boolean hasAnsible = files.stream().anyMatch(f -> f.getName().endsWith(".yml") || f.getName().endsWith(".yaml"));
 
         StringBuilder sb = new StringBuilder();
         sb.append("#!/bin/bash\n");
-        sb.append("set -e\n");
-        sb.append("\n");
+        sb.append("set -e\n\n");
+
         sb.append("echo \"Начинается деплой %s...\"\n".formatted(app.getName()));
-        sb.append("cd %s\n".formatted(appDir));
-        sb.append("\n");
+        sb.append("cd %s\n\n".formatted(appDir));
+
+        sb.append("echo \"GIT_USERNAME: $GIT_USERNAME\"\n");
+        sb.append("echo \"GIT_TOKEN длина: ${#GIT_TOKEN} символов\"\n\n");
+
+        sb.append("if [ ! -d .git ]; then\n");
+        sb.append("  echo 'Репозиторий не найден, клонируем...'\n");
+        sb.append("  git clone https://${GIT_USERNAME}:${GIT_TOKEN}@github.com/%s repo_tmp\n".formatted(repoPath));
+        sb.append("  cp -r repo_tmp/* .\n");
+        sb.append("  cp -r repo_tmp/.* . || true\n");
+        sb.append("  rm -rf repo_tmp\n");
+        sb.append("else\n");
+        sb.append("  echo 'Репозиторий уже существует, пропускаем клонирование'\n");
+        sb.append("fi\n\n");
+
+        sb.append("echo 'Текущий коммит:'\n");
+        sb.append("git log -1 --oneline || true\n\n");
 
         if (hasTerraform) {
             sb.append("if command -v terraform >/dev/null 2>&1; then\n");
             sb.append("  echo 'Terraform detected'\n");
-            sb.append("  terraform init\n");
-            sb.append("  terraform apply -auto-approve\n");
+            sb.append("  find . -type f -name \"*.tf\" | while read tf_file; do\n");
+            sb.append("    dir=$(dirname \"$tf_file\")\n");
+            sb.append("    echo \"→ Terraform apply в $dir\"\n");
+            sb.append("    (cd \"$dir\" && terraform init && terraform apply -auto-approve)\n");
+            sb.append("  done\n");
             sb.append("else\n");
             sb.append("  echo 'Terraform не установлен на сервере'\n");
             sb.append("  exit 1\n");
@@ -80,7 +101,14 @@ public class GitflowGeneratorService {
         if (hasAnsible) {
             sb.append("if command -v ansible-playbook >/dev/null 2>&1; then\n");
             sb.append("  echo 'Ansible detected'\n");
-            sb.append("  ansible-playbook playbook.yml\n");
+            sb.append("  find . -type f \\( -name \"*.yml\" -o -name \"*.yaml\" \\) | while read f; do\n");
+            sb.append("    if [[ \"$f\" == *\".github/workflows/\"* ]]; then\n");
+            sb.append("      echo \"Пропуск служебного файла: $f\"\n");
+            sb.append("      continue\n");
+            sb.append("    fi\n");
+            sb.append("    echo \"→ Запуск Ansible playbook: $f\"\n");
+            sb.append("    ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook \"$f\" -i localhost, -c local --ask-become-pass || echo \"⚠ Ошибка при запуске $f\"\n");
+            sb.append("  done\n");
             sb.append("else\n");
             sb.append("  echo 'Ansible не установлен на сервере'\n");
             sb.append("  exit 1\n");
@@ -88,12 +116,11 @@ public class GitflowGeneratorService {
         }
 
         if (!hasTerraform && !hasAnsible) {
-            sb.append("echo 'Ни одного поддерживаемого конфигурационного файла не найдено. Деплой пропущен.'\n");
+            sb.append("echo 'Ни Terraform, ни Ansible не найдены. Деплой пропущен.'\n");
             sb.append("exit 0\n");
         }
 
         sb.append("echo \"Деплой завершён\"\n");
-
         return sb.toString();
     }
 
@@ -110,7 +137,10 @@ public class GitflowGeneratorService {
                 jobs:
                   deploy:
                     runs-on: ubuntu-22.04
-
+                    env:
+                      GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
+                      GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+                      ANSIBLE_BECOME_PASS: ${{ secrets.SERVER_PASSWORD }}
                     steps:
                       - name: Checkout
                         uses: actions/checkout@v3
@@ -121,6 +151,7 @@ public class GitflowGeneratorService {
                           host: %s
                           username: %s
                           password: ${{ secrets.SERVER_PASSWORD }}
+                          envs: GIT_USERNAME,GIT_TOKEN,ANSIBLE_BECOME_PASS
                           script: |
                             cd %s
                             bash ./deploy.sh
