@@ -73,12 +73,13 @@ public class GitflowGeneratorService {
 
         sb.append("if [ ! -d .git ]; then\n");
         sb.append("  echo 'Репозиторий не найден, клонируем...'\n");
-        sb.append("  git clone https://${GIT_USERNAME}:${GIT_TOKEN}@github.com/%s repo_tmp\n".formatted(repoPath));
-        sb.append("  cp -r repo_tmp/* .\n");
-        sb.append("  cp -r repo_tmp/.* . || true\n");
-        sb.append("  rm -rf repo_tmp\n");
+        sb.append("  git clone https://${GIT_USERNAME}:${GIT_TOKEN}@github.com/%s .tmp_clone\n".formatted(repoPath));
+        sb.append("  mv .tmp_clone/.git ./\n");
+        sb.append("  cp -r .tmp_clone/* .\n");
+        sb.append("  rm -rf .tmp_clone\n");
         sb.append("else\n");
-        sb.append("  echo 'Репозиторий уже существует, пропускаем клонирование'\n");
+        sb.append("  echo 'Репозиторий уже существует, выполняем git pull'\n");
+        sb.append("  git pull\n");
         sb.append("fi\n\n");
 
         sb.append("echo 'Текущий коммит:'\n");
@@ -107,7 +108,7 @@ public class GitflowGeneratorService {
             sb.append("      continue\n");
             sb.append("    fi\n");
             sb.append("    echo \"→ Запуск Ansible playbook: $f\"\n");
-            sb.append("    ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook \"$f\" -i localhost, -c local --ask-become-pass || echo \"⚠ Ошибка при запуске $f\"\n");
+            sb.append("    ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook \"$f\" -i localhost, -c local --extra-vars \"ansible_become_pass=$ANSIBLE_BECOME_PASS\" || echo \"⚠ Ошибка при запуске $f\"\n");
             sb.append("  done\n");
             sb.append("else\n");
             sb.append("  echo 'Ansible не установлен на сервере'\n");

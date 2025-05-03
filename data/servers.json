@@ -5,6 +5,6 @@
   "port" : 22,
   "password" : "WiGtF2BE!",
   "status" : "Successful",
-  "ram" : "1299 МБ / 19994 МБ",
-  "cpu" : "7.2%"
+  "cpu" : "6%",
+  "ram" : "1449 МБ / 19994 МБ"
 } ]

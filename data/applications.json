@@ -1,0 +1,11 @@
+[ {
+  "name" : "final_version",
+  "repoName" : "configs",
+  "branch" : "master",
+  "path" : "my-app",
+  "projectName" : "configs_new",
+  "serverName" : "test",
+  "syncStrategy" : "auto",
+  "createdAt" : "2025-05-03T13:53:04.539Z",
+  "status" : "Synced"
+} ]
