@@ -10,4 +10,5 @@ public class GitFileSaveRequest {
     private String path;
     private String content;
     private String commitMessage;
+    private String serverName;
 }

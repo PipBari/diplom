@@ -265,16 +265,18 @@ const saveFile = async () => {
   if (type) {
     try {
       const res = await api.post(`/validate/${type}`, {
-        path: filename,
-        content: currentFileContent.value
+        filename,
+        content: currentFileContent.value,
+        serverName: serverInfo.value?.name || null
       })
 
       if (!res.data.valid) {
-        addToast(res.data.output, 'error')
+        addToast(res.data.output || 'Ошибка валидации', 'error')
         return
       }
     } catch (e) {
-      addToast(e.response?.data?.message || e.message, 'error')
+      const error = e.response?.data?.output || e.response?.data?.message || e.message
+      addToast(error || 'Ошибка валидации', 'error')
       return
     }
   }
@@ -285,6 +287,7 @@ const saveFile = async () => {
       content: currentFileContent.value,
       commitMessage: `Обновление файла ${filename}`
     })
+
     await refreshTree()
     addToast(res.data.output || `Файл ${filename} сохранён`, 'success')
   } catch (e) {

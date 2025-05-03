@@ -92,7 +92,12 @@ public class GitWriterController {
                     (filename.endsWith(".yml") || filename.endsWith(".yaml")) ? "ansible" : null;
 
             if (type != null) {
-                ValidationRequestDto validationRequest = new ValidationRequestDto(fullPath, request.getContent());
+                ValidationRequestDto validationRequest = new ValidationRequestDto(
+                        fullPath,
+                        request.getContent(),
+                        request.getServerName()
+                );
+
                 ValidationResultDto result = validationService.validate(type, validationRequest);
                 if (!result.isValid()) {
                     return ResponseEntity.badRequest().body(result);

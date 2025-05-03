@@ -2,23 +2,29 @@ package ru.backend.service.validation;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import ru.backend.rest.settings.dto.ServersDto;
 import ru.backend.rest.validation.dto.ValidationRequestDto;
 import ru.backend.rest.validation.dto.ValidationResultDto;
+import ru.backend.service.settings.ServersService;
 
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.InputStream;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
+@RequiredArgsConstructor
 public class TemplateValidationService {
 
     private static final Logger log = LoggerFactory.getLogger(TemplateValidationService.class);
+    private final ServersService serversService;
 
     public ValidationResultDto validate(String type, ValidationRequestDto request) {
         switch (type.toLowerCase()) {
@@ -32,26 +38,17 @@ public class TemplateValidationService {
     }
 
     public ValidationResultDto validateTerraform(ValidationRequestDto request) {
+        if (request.getFilename() == null || request.getFilename().isBlank()) {
+            return new ValidationResultDto(false, "Поле filename отсутствует или пустое");
+        }
+
         File tempDir = null;
         try {
             tempDir = Files.createTempDirectory("tf-validate").toFile();
-            File tfFile = new File(tempDir, "main.tf");
-            Files.writeString(tfFile.toPath(), request.getContent());
 
-            ProcessBuilder fmt = new ProcessBuilder(
-                    "docker", "run", "--rm",
-                    "-v", tempDir.getAbsolutePath() + ":/data",
-                    "hashicorp/terraform:light",
-                    "fmt", "-check", "-no-color", "/data/main.tf"
-            );
-            Process fmtProcess = fmt.start();
-            fmtProcess.waitFor(10, TimeUnit.SECONDS);
-            String fmtOutput = new String(fmtProcess.getInputStream().readAllBytes());
-            String fmtError = new String(fmtProcess.getErrorStream().readAllBytes());
-
-            if (fmtProcess.exitValue() != 0) {
-                return new ValidationResultDto(false, "Terraform fmt: форматирование не соответствует стилю", List.of(fmtOutput + fmtError));
-            }
+            File file = new File(tempDir, request.getFilename());
+            if (!file.getParentFile().exists()) file.getParentFile().mkdirs();
+            Files.writeString(file.toPath(), request.getContent(), StandardCharsets.UTF_8);
 
             ProcessBuilder init = new ProcessBuilder(
                     "docker", "run", "--rm",
@@ -71,31 +68,53 @@ public class TemplateValidationService {
                     "validate", "-no-color"
             );
             Process process = validate.start();
-
             boolean finished = process.waitFor(20, TimeUnit.SECONDS);
             String stderr = new String(process.getErrorStream().readAllBytes());
             String stdout = new String(process.getInputStream().readAllBytes());
 
             if (!finished) {
-                return new ValidationResultDto(false, "Таймаут terraform validate", List.of());
+                return new ValidationResultDto(false, "Таймаут terraform validate");
             }
 
             if (process.exitValue() != 0) {
-                if (stderr.contains("Missing required provider")) {
-                    return new ValidationResultDto(true, "Провайдеры отсутствуют, требуется `terraform init`.", List.of(stderr + stdout));
-                }
                 return new ValidationResultDto(false, "Terraform ошибка", List.of(stderr + stdout));
+            }
+
+            if (request.getServerName() != null && !request.getServerName().isBlank()) {
+                ServersDto server = serversService.getAll().stream()
+                        .filter(s -> s.getName().equals(request.getServerName()))
+                        .findFirst()
+                        .orElse(null);
+
+                if (server != null && "Successful".equals(server.getStatus())) {
+                    int serverRamMb = parseAvailableRam(server.getRAM());
+                    double serverCpuFreePercent = parseFreeCpuPercent(server.getCPU());
+
+                    Map<String, Integer> vars = extractVarsFromAllFiles(tempDir, List.of("ram", "cpu"));
+                    int requestedRamMb = vars.getOrDefault("ram", 0);
+                    int requestedCpu = vars.getOrDefault("cpu", 0);
+
+                    if (requestedRamMb > serverRamMb) {
+                        return new ValidationResultDto(false,
+                                "Недостаточно оперативной памяти: требуется %d МБ, доступно %d МБ"
+                                        .formatted(requestedRamMb, serverRamMb));
+                    }
+
+                    if (requestedCpu * 100 > serverCpuFreePercent) {
+                        return new ValidationResultDto(false,
+                                "Недостаточно CPU: требуется %d vCPU (~%d%%), доступно ~%.1f%%"
+                                        .formatted(requestedCpu, requestedCpu * 100, serverCpuFreePercent));
+                    }
+                }
             }
 
             return new ValidationResultDto(true, "Terraform: OK");
 
         } catch (Exception e) {
             log.error("Terraform validation failed", e);
-            return new ValidationResultDto(false, "Terraform ошибка: " + e.getMessage(), List.of());
+            return new ValidationResultDto(false, "Terraform ошибка: " + e.getMessage());
         } finally {
-            if (tempDir != null) {
-                deleteDirectory(tempDir);
-            }
+            if (tempDir != null) deleteDirectory(tempDir);
         }
     }
 
@@ -139,7 +158,7 @@ public class TemplateValidationService {
             String lintErr = new String(lintProcess.getErrorStream().readAllBytes());
 
             if (!lintFinished) {
-                return new ValidationResultDto(false, "Таймаут ansible-lint", List.of());
+                return new ValidationResultDto(false, "Таймаут ansible-lint");
             }
 
             if (lintProcess.exitValue() != 0) {
@@ -150,11 +169,62 @@ public class TemplateValidationService {
 
         } catch (Exception e) {
             log.error("Ansible validation failed", e);
-            return new ValidationResultDto(false, "Ansible ошибка: " + e.getMessage(), List.of());
+            return new ValidationResultDto(false, "Ansible ошибка: " + e.getMessage());
         } finally {
-            if (tempDir != null) {
-                deleteDirectory(tempDir);
+            if (tempDir != null) deleteDirectory(tempDir);
+        }
+    }
+
+    private Map<String, Integer> extractVarsFromAllFiles(File dir, List<String> varNames) {
+        Map<String, Integer> result = new HashMap<>();
+        Pattern pattern = Pattern.compile("variable\\s+\"(\\w+)\"\\s*\\{[^}]*?default\\s*=\\s*(\\d+)", Pattern.DOTALL);
+
+        Queue<File> queue = new LinkedList<>();
+        queue.add(dir);
+
+        while (!queue.isEmpty()) {
+            File current = queue.poll();
+            if (current.isDirectory()) {
+                File[] files = current.listFiles();
+                if (files != null) Collections.addAll(queue, files);
+            } else if (current.getName().endsWith(".tf")) {
+                try {
+                    String content = Files.readString(current.toPath());
+                    Matcher matcher = pattern.matcher(content);
+                    while (matcher.find()) {
+                        String name = matcher.group(1);
+                        int value = Integer.parseInt(matcher.group(2));
+                        if (varNames.contains(name)) {
+                            result.put(name, value);
+                        }
+                    }
+                } catch (IOException e) {
+                    log.warn("Ошибка чтения файла: {}", current.getName());
+                }
             }
+        }
+
+        return result;
+    }
+
+    private int parseAvailableRam(String ramInfo) {
+        try {
+            String[] parts = ramInfo.trim().split("/");
+            int used = Integer.parseInt(parts[0].replaceAll("[^0-9]", "").trim());
+            int total = Integer.parseInt(parts[1].replaceAll("[^0-9]", "").trim());
+            return total - used;
+        } catch (Exception e) {
+            log.warn("Ошибка парсинга RAM: {}", e.getMessage());
+            return 0;
+        }
+    }
+
+    private double parseFreeCpuPercent(String cpuInfo) {
+        try {
+            return 100.0 - Double.parseDouble(cpuInfo.replace("%", "").trim());
+        } catch (Exception e) {
+            log.warn("Ошибка парсинга CPU: {}", e.getMessage());
+            return 0;
         }
     }
 

@@ -8,4 +8,5 @@ import lombok.*;
 public class ValidationRequestDto {
     private String filename;
     private String content;
+    private String serverName;
 }
