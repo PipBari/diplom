@@ -5,8 +5,8 @@
   "port" : 22,
   "password" : "pp_jTE#Nv4TLkg",
   "status" : "Successful",
-  "cpu" : "0%",
-  "ram" : "223 МБ / 3911 МБ"
+  "cpu" : "6.2%",
+  "ram" : "244 МБ / 3911 МБ"
 }, {
   "name" : "test",
   "host" : "89.179.242.33",
@@ -14,8 +14,8 @@
   "port" : 22,
   "password" : "WiGtF2BE!",
   "status" : "Successful",
-  "cpu" : "10%",
-  "ram" : "1405 МБ / 19994 МБ"
+  "cpu" : "8.6%",
+  "ram" : "1417 МБ / 19994 МБ"
 }, {
   "name" : "tf_server",
   "host" : "217.198.12.119",

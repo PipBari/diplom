@@ -387,13 +387,23 @@ const createNewFolder = async () => {
     return
   }
 
-  await api.post(`/git/writer/${repo.value.name}/branch/${app.value.branch}/create-folder`, {
-    path: `${app.value.path}/${name}`.replace(/\/+/g, '/'),
-    commitMessage: `Создание папки ${name}`
-  })
-  showNewFolderDialog.value = false
-  await refreshTree()
-  addToast('Папка создана', 'success')
+  const basePath = contextMenu.value.node?.type === 'folder'
+      ? contextMenu.value.node.fullPath
+      : app.value.path
+
+  const fullPath = `${basePath}/${name}`.replace(/\/+/g, '/')
+
+  try {
+    await api.post(`/git/writer/${repo.value.name}/branch/${app.value.branch}/create-folder`, {
+      path: fullPath,
+      commitMessage: `Создание папки ${name}`
+    })
+    showNewFolderDialog.value = false
+    await refreshTree()
+    addToast('Папка создана', 'success')
+  } catch (e) {
+    addToast(e.response?.data || 'Ошибка при создании папки', 'error')
+  }
 }
 
 const deletePath = async () => {
