@@ -26,30 +26,32 @@ public class TemplateValidationService {
     private static final Logger log = LoggerFactory.getLogger(TemplateValidationService.class);
     private final ServersService serversService;
 
-    public ValidationResultDto validate(String type, ValidationRequestDto request) {
+    public ValidationResultDto validate(String type, List<ValidationRequestDto> requests) {
         switch (type.toLowerCase()) {
             case "terraform":
-                return validateTerraform(request);
+                return validateTerraform(requests);
             case "ansible":
-                return validateAnsible(request);
+                return validateAnsible(requests.get(0));
             default:
                 return new ValidationResultDto(true, "OK (валидация не требуется)");
         }
     }
 
-    public ValidationResultDto validateTerraform(ValidationRequestDto request) {
-        if (request.getFilename() == null || request.getFilename().isBlank()) {
-            return new ValidationResultDto(false, "Поле filename отсутствует или пустое");
+    public ValidationResultDto validateTerraform(List<ValidationRequestDto> requests) {
+        if (requests.isEmpty()) {
+            return new ValidationResultDto(false, "Список файлов пуст");
         }
 
         File tempDir = null;
         try {
             tempDir = Files.createTempDirectory("tf-validate").toFile();
-            File file = new File(tempDir, request.getFilename());
-            if (!file.getParentFile().exists()) file.getParentFile().mkdirs();
-            Files.writeString(file.toPath(), request.getContent(), StandardCharsets.UTF_8);
 
-            // Проверка синтаксиса каждого .tf файла
+            for (ValidationRequestDto req : requests) {
+                File f = new File(tempDir, req.getFilename());
+                if (!f.getParentFile().exists()) f.getParentFile().mkdirs();
+                Files.writeString(f.toPath(), req.getContent(), StandardCharsets.UTF_8);
+            }
+
             Map.Entry<String, String> syntaxError = findInvalidSyntaxFile(tempDir);
             if (syntaxError != null) {
                 return new ValidationResultDto(false,
@@ -57,61 +59,50 @@ public class TemplateValidationService {
                         List.of(syntaxError.getValue()));
             }
 
-            ProcessBuilder init = new ProcessBuilder(
-                    "docker", "run", "--rm",
-                    "-v", tempDir.getAbsolutePath() + ":/data",
-                    "-e", "TF_IN_AUTOMATION=1",
-                    "hashicorp/terraform:light",
-                    "init", "-backend=false"
-            );
-            Process initProcess = init.start();
-            initProcess.waitFor(15, TimeUnit.SECONDS);
+            runDockerTerraform(tempDir, "init", "-backend=false");
+            runDockerTerraform(tempDir, "validate", "-no-color");
 
-            ProcessBuilder validate = new ProcessBuilder(
-                    "docker", "run", "--rm",
-                    "-v", tempDir.getAbsolutePath() + ":/data",
-                    "-e", "TF_IN_AUTOMATION=1",
-                    "hashicorp/terraform:light",
-                    "validate", "-no-color"
-            );
-            Process process = validate.start();
-            boolean finished = process.waitFor(20, TimeUnit.SECONDS);
-            String stderr = new String(process.getErrorStream().readAllBytes());
-            String stdout = new String(process.getInputStream().readAllBytes());
+            ValidationRequestDto current = requests.get(requests.size() - 1);
+            List<ValidationRequestDto> others = requests.subList(0, requests.size() - 1);
 
-            if (!finished) {
-                return new ValidationResultDto(false, "Таймаут terraform validate");
-            }
-
-            if (process.exitValue() != 0) {
-                return new ValidationResultDto(false, "Terraform ошибка", List.of(stderr + stdout));
-            }
-
-            // Проверка ресурсов
-            if (request.getServerName() != null && !request.getServerName().isBlank()) {
+            String serverName = current.getServerName();
+            if (serverName != null && !serverName.isBlank()) {
                 ServersDto server = serversService.getAll().stream()
-                        .filter(s -> s.getName().equals(request.getServerName()))
-                        .findFirst()
-                        .orElse(null);
+                        .filter(s -> s.getName().equals(serverName))
+                        .findFirst().orElse(null);
 
                 if (server != null && "Successful".equals(server.getStatus())) {
-                    int serverRamMb = parseAvailableRam(server.getRAM());
-                    double serverCpuFreePercent = parseFreeCpuPercent(server.getCPU());
+                    int totalRam = parseTotalRam(server.getRAM());
+                    int usedRam = parseUsedRam(server.getRAM());
+                    double availableCpuPercent = parseFreeCpuPercent(server.getCPU());
 
-                    Map<String, Integer> vars = extractVarsFromAllFiles(tempDir, List.of("ram", "cpu"));
-                    int requestedRamMb = vars.getOrDefault("ram", 0);
-                    int requestedCpu = vars.getOrDefault("cpu", 0);
+                    log.info("[RESOURCE] Сервер {}: всего {} МБ, использовано системой {} МБ", serverName, totalRam, usedRam);
 
-                    if (requestedRamMb > serverRamMb) {
+                    Map<String, Integer> currentRes = extractVarsFromRequests(List.of(current));
+                    Map<String, Integer> othersRes = extractVarsFromRequests(others);
+
+                    int currentRam = currentRes.getOrDefault("ram", 0);
+                    int otherRam = othersRes.getOrDefault("ram", 0);
+                    int availableRam = totalRam - usedRam - otherRam;
+
+                    int currentCpu = currentRes.getOrDefault("cpu", 0);
+                    int otherCpu = othersRes.getOrDefault("cpu", 0);
+                    double availableCpu = availableCpuPercent - (otherCpu * 100);
+
+                    log.info("[RESOURCE] Уже выделено .tf-файлами: {} МБ RAM, {} vCPU", otherRam, otherCpu);
+                    log.info("[RESOURCE] Текущий запрос: {} МБ RAM, {} vCPU", currentRam, currentCpu);
+                    log.info("[RESOURCE] Доступно: {} МБ RAM, ~{}% CPU", availableRam, availableCpu);
+
+                    if (currentRam > availableRam) {
                         return new ValidationResultDto(false,
-                                "Недостаточно оперативной памяти: требуется %d МБ, доступно %d МБ"
-                                        .formatted(requestedRamMb, serverRamMb));
+                                "Недостаточно оперативной памяти: требуется %d МБ, доступно %d МБ (всего %d, занято системой %d, другими файлами %d)"
+                                        .formatted(currentRam, availableRam, totalRam, usedRam, otherRam));
                     }
 
-                    if (requestedCpu * 100 > serverCpuFreePercent) {
+                    if (currentCpu * 100 > availableCpu) {
                         return new ValidationResultDto(false,
-                                "Недостаточно CPU: требуется %d vCPU (~%d%%), доступно ~%.1f%%"
-                                        .formatted(requestedCpu, requestedCpu * 100, serverCpuFreePercent));
+                                "Недостаточно CPU: требуется %d vCPU (~%d%%), доступно ~%.1f%% (всего 100%%, уже занято ~%.1f%% другими файлами)"
+                                        .formatted(currentCpu, currentCpu * 100, availableCpu, otherCpu * 100.0));
                     }
                 }
             }
@@ -126,10 +117,95 @@ public class TemplateValidationService {
         }
     }
 
+    private void runDockerTerraform(File tempDir, String... args) throws IOException, InterruptedException {
+        List<String> command = new ArrayList<>(List.of("docker", "run", "--rm",
+                "-v", tempDir.getAbsolutePath() + ":/data",
+                "-e", "TF_IN_AUTOMATION=1",
+                "hashicorp/terraform:light"));
+        command.addAll(List.of(args));
+
+        ProcessBuilder builder = new ProcessBuilder(command);
+        Process process = builder.start();
+        boolean finished = process.waitFor(20, TimeUnit.SECONDS);
+        String stderr = new String(process.getErrorStream().readAllBytes());
+        String stdout = new String(process.getInputStream().readAllBytes());
+
+        log.info("[TERRAFORM {}] STDOUT:\n{}", args[0], stdout);
+        log.info("[TERRAFORM {}] STDERR:\n{}", args[0], stderr);
+
+        if (!finished) throw new RuntimeException("Таймаут terraform " + args[0]);
+        if (process.exitValue() != 0) throw new RuntimeException("Terraform " + args[0] + " ошибка: " + stderr + stdout);
+    }
+
+    private Map<String, Integer> extractVarsFromRequests(List<ValidationRequestDto> requests) {
+        Map<String, Integer> totals = new HashMap<>();
+
+        Pattern varPattern = Pattern.compile(
+                "variable\\s+\"(\\w+)\"\\s*\\{[^}]*?default\\s*=\\s*(\\d+)", Pattern.DOTALL | Pattern.CASE_INSENSITIVE
+        );
+        Pattern localPattern = Pattern.compile(
+                "locals\\s*\\{[^}]*?(\\w+)\\s*=\\s*(\\d+)[^}]*?\\}", Pattern.DOTALL | Pattern.CASE_INSENSITIVE
+        );
+        Pattern resourcePattern = Pattern.compile(
+                "(ram|memory|mem_limit|mem|cpu|vcpus|core)\\s*=\\s*(\\d+)", Pattern.CASE_INSENSITIVE
+        );
+
+        for (ValidationRequestDto request : requests) {
+            try {
+                String content = request.getContent();
+                log.info("[PARSE] Файл: {}", request.getFilename());
+
+                Matcher varMatcher = varPattern.matcher(content);
+                while (varMatcher.find()) {
+                    String name = varMatcher.group(1).toLowerCase();
+                    int value = Integer.parseInt(varMatcher.group(2));
+                    log.info("[VAR] {} = {}", name, value);
+
+                    if (name.contains("ram") || name.contains("mem")) {
+                        totals.merge("ram", value, Integer::sum);
+                    } else if (name.contains("cpu") || name.contains("core") || name.contains("vcpus")) {
+                        totals.merge("cpu", value, Integer::sum);
+                    }
+                }
+
+                Matcher localMatcher = localPattern.matcher(content);
+                while (localMatcher.find()) {
+                    String name = localMatcher.group(1).toLowerCase();
+                    int value = Integer.parseInt(localMatcher.group(2));
+                    log.info("[LOCAL] {} = {}", name, value);
+
+                    if (name.contains("ram") || name.contains("mem")) {
+                        totals.merge("ram", value, Integer::sum);
+                    } else if (name.contains("cpu") || name.contains("core") || name.contains("vcpus")) {
+                        totals.merge("cpu", value, Integer::sum);
+                    }
+                }
+
+                Matcher resMatcher = resourcePattern.matcher(content);
+                while (resMatcher.find()) {
+                    String name = resMatcher.group(1).toLowerCase();
+                    int value = Integer.parseInt(resMatcher.group(2));
+                    log.info("[RESOURCE] {} = {}", name, value);
+
+                    if (name.contains("ram") || name.contains("mem")) {
+                        totals.merge("ram", value, Integer::sum);
+                    } else if (name.contains("cpu") || name.contains("core") || name.contains("vcpus")) {
+                        totals.merge("cpu", value, Integer::sum);
+                    }
+                }
+
+            } catch (Exception e) {
+                log.warn("Ошибка парсинга файла {}: {}", request.getFilename(), e.getMessage());
+            }
+        }
+
+        log.info("[TF VAR TOTALS] RAM: {}, CPU: {}", totals.getOrDefault("ram", 0), totals.getOrDefault("cpu", 0));
+        return totals;
+    }
+
     private Map.Entry<String, String> findInvalidSyntaxFile(File dir) {
         Queue<File> queue = new LinkedList<>();
         queue.add(dir);
-
         while (!queue.isEmpty()) {
             File current = queue.poll();
             if (current.isDirectory()) {
@@ -143,34 +219,59 @@ public class TemplateValidationService {
                             "hashicorp/terraform:light",
                             "fmt", "-check", "/data/" + current.getName()
                     );
-
                     Process process = fmtCheck.start();
                     boolean finished = process.waitFor(5, TimeUnit.SECONDS);
                     String stderr = new String(process.getErrorStream().readAllBytes());
                     String stdout = new String(process.getInputStream().readAllBytes());
-
                     if (!finished || process.exitValue() != 0) {
                         return Map.entry(current.getName(), stderr + stdout);
                     }
                 } catch (Exception e) {
-                    log.error("Ошибка terraform fmt: {}", current.getName(), e);
                     return Map.entry(current.getName(), e.getMessage());
                 }
             }
         }
-
         return null;
+    }
+
+    private int parseUsedRam(String ramInfo) {
+        try {
+            return Integer.parseInt(ramInfo.split("/")[0].replaceAll("[^0-9]", "").trim());
+        } catch (Exception e) {
+            log.warn("Ошибка RAM used: {}", e.getMessage());
+            return 0;
+        }
+    }
+
+    private int parseTotalRam(String ramInfo) {
+        try {
+            return Integer.parseInt(ramInfo.split("/")[1].replaceAll("[^0-9]", "").trim());
+        } catch (Exception e) {
+            log.warn("Ошибка RAM total: {}", e.getMessage());
+            return 0;
+        }
+    }
+
+    private double parseFreeCpuPercent(String cpuInfo) {
+        try {
+            return 100.0 - Double.parseDouble(cpuInfo.replace("%", "").trim());
+        } catch (Exception e) {
+            log.warn("Ошибка CPU: {}", e.getMessage());
+            return 0;
+        }
+    }
+
+    private void deleteDirectory(File dir) {
+        if (dir == null || !dir.exists()) return;
+        File[] files = dir.listFiles();
+        if (files != null) for (File f : files) deleteDirectory(f);
+        dir.delete();
     }
 
     public ValidationResultDto validateAnsible(ValidationRequestDto request) {
         File tempDir = null;
         try {
-            try (InputStream is = new ByteArrayInputStream(request.getContent().getBytes())) {
-                new ObjectMapper(new YAMLFactory()).readTree(is);
-            } catch (Exception yamlError) {
-                return new ValidationResultDto(false, "YAML ошибка", List.of(yamlError.getMessage()));
-            }
-
+            new ObjectMapper(new YAMLFactory()).readTree(new ByteArrayInputStream(request.getContent().getBytes()));
             tempDir = Files.createTempDirectory("ansible-validate").toFile();
             File ymlFile = new File(tempDir, "playbook.yml");
             Files.writeString(ymlFile.toPath(), request.getContent());
@@ -181,32 +282,26 @@ public class TemplateValidationService {
                     "willhallonline/ansible:latest",
                     "ansible-playbook", "--syntax-check", "/data/playbook.yml"
             );
-            Process syntaxProcess = syntaxCheck.start();
-            boolean syntaxFinished = syntaxProcess.waitFor(20, TimeUnit.SECONDS);
-            String syntaxOut = new String(syntaxProcess.getInputStream().readAllBytes());
-            String syntaxErr = new String(syntaxProcess.getErrorStream().readAllBytes());
-
-            if (!syntaxFinished || syntaxProcess.exitValue() != 0) {
-                return new ValidationResultDto(false, "Ansible syntax-check ошибка", List.of(syntaxOut + syntaxErr));
+            Process syntax = syntaxCheck.start();
+            if (!syntax.waitFor(20, TimeUnit.SECONDS) || syntax.exitValue() != 0) {
+                return new ValidationResultDto(false, "Ansible syntax ошибка", List.of(
+                        new String(syntax.getInputStream().readAllBytes()) +
+                                new String(syntax.getErrorStream().readAllBytes())));
             }
 
             ProcessBuilder lint = new ProcessBuilder(
                     "docker", "run", "--rm",
                     "-v", tempDir.getAbsolutePath() + ":/data",
-                    "cytopia/ansible-lint",
-                    "/data/playbook.yml"
+                    "cytopia/ansible-lint", "/data/playbook.yml"
             );
-            Process lintProcess = lint.start();
-            boolean lintFinished = lintProcess.waitFor(20, TimeUnit.SECONDS);
-            String lintOut = new String(lintProcess.getInputStream().readAllBytes());
-            String lintErr = new String(lintProcess.getErrorStream().readAllBytes());
-
-            if (!lintFinished) {
+            Process linter = lint.start();
+            if (!linter.waitFor(20, TimeUnit.SECONDS)) {
                 return new ValidationResultDto(false, "Таймаут ansible-lint");
             }
-
-            if (lintProcess.exitValue() != 0) {
-                return new ValidationResultDto(false, "Ansible-lint ошибка", List.of(lintOut + lintErr));
+            if (linter.exitValue() != 0) {
+                return new ValidationResultDto(false, "Ansible-lint ошибка", List.of(
+                        new String(linter.getInputStream().readAllBytes()) +
+                                new String(linter.getErrorStream().readAllBytes())));
             }
 
             return new ValidationResultDto(true, "Ansible: OK");
@@ -217,79 +312,5 @@ public class TemplateValidationService {
         } finally {
             if (tempDir != null) deleteDirectory(tempDir);
         }
-    }
-
-    private Map<String, Integer> extractVarsFromAllFiles(File dir, List<String> varNames) {
-        Map<String, Integer> declaredVars = new HashMap<>();
-        Map<String, Integer> result = new HashMap<>();
-
-        Pattern variablePattern = Pattern.compile("variable\\s+\"(\\w+)\"\\s*\\{[^}]*?default\\s*=\\s*(\\d+)", Pattern.DOTALL);
-
-        Queue<File> queue = new LinkedList<>();
-        queue.add(dir);
-
-        while (!queue.isEmpty()) {
-            File current = queue.poll();
-            if (current.isDirectory()) {
-                File[] files = current.listFiles();
-                if (files != null) Collections.addAll(queue, files);
-            } else if (current.getName().endsWith(".tf")) {
-                try {
-                    String content = Files.readString(current.toPath());
-                    Matcher varMatcher = variablePattern.matcher(content);
-                    while (varMatcher.find()) {
-                        String name = varMatcher.group(1);
-                        int value = Integer.parseInt(varMatcher.group(2));
-                        declaredVars.put(name, value);
-                    }
-                } catch (IOException e) {
-                    log.warn("Ошибка чтения файла: {}", current.getName());
-                }
-            }
-        }
-
-        for (Map.Entry<String, Integer> entry : declaredVars.entrySet()) {
-            String name = entry.getKey().toLowerCase();
-            int value = entry.getValue();
-
-            if (name.contains("ram") || name.contains("memory")) {
-                result.put("ram", value);
-            } else if (name.contains("cpu") || name.contains("core") || name.contains("vcpus")) {
-                result.put("cpu", value);
-            }
-        }
-
-        return result;
-    }
-
-    private int parseAvailableRam(String ramInfo) {
-        try {
-            String[] parts = ramInfo.trim().split("/");
-            int used = Integer.parseInt(parts[0].replaceAll("[^0-9]", "").trim());
-            int total = Integer.parseInt(parts[1].replaceAll("[^0-9]", "").trim());
-            return total - used;
-        } catch (Exception e) {
-            log.warn("Ошибка парсинга RAM: {}", e.getMessage());
-            return 0;
-        }
-    }
-
-    private double parseFreeCpuPercent(String cpuInfo) {
-        try {
-            return 100.0 - Double.parseDouble(cpuInfo.replace("%", "").trim());
-        } catch (Exception e) {
-            log.warn("Ошибка парсинга CPU: {}", e.getMessage());
-            return 0;
-        }
-    }
-
-    private void deleteDirectory(File directory) {
-        File[] allContents = directory.listFiles();
-        if (allContents != null) {
-            for (File file : allContents) {
-                deleteDirectory(file);
-            }
-        }
-        directory.delete();
     }
 }

@@ -264,16 +264,47 @@ const saveFile = async () => {
 
   if (type) {
     try {
-      const res = await api.post(`/validate/${type}`, {
+      const allEntries = []
+      const collectFiles = (node) => {
+        if (node.type === 'file' && node.name.endsWith('.tf')) {
+          allEntries.push(node)
+        }
+        if (node.children) {
+          node.children.forEach(collectFiles)
+        }
+      }
+      collectFiles(rootEntry.value)
+
+      const allFiles = await Promise.all(
+          allEntries.map(async (node) => {
+            try {
+              const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/file`, {
+                params: { path: node.fullPath }
+              })
+              return {
+                filename: node.fullPath,
+                content: res.data,
+                serverName: serverInfo.value?.name || null
+              }
+            } catch {
+              return null
+            }
+          })
+      )
+
+      const updatedFiles = allFiles.filter(Boolean).filter(f => f.filename !== filename)
+      updatedFiles.push({
         filename,
         content: currentFileContent.value,
         serverName: serverInfo.value?.name || null
       })
 
+      const res = await api.post(`/validate/${type}`, updatedFiles)
       if (!res.data.valid) {
         addToast(res.data.output || 'Ошибка валидации', 'error')
         return
       }
+
     } catch (e) {
       const error = e.response?.data?.output || e.response?.data?.message || e.message
       addToast(error || 'Ошибка валидации', 'error')
@@ -282,14 +313,16 @@ const saveFile = async () => {
   }
 
   try {
-    const res = await api.post(`/git/writer/${repo.value.name}/branch/${app.value.branch}/save`, {
+    await api.post(`/git/writer/${repo.value.name}/branch/${app.value.branch}/save`, {
       path: filename,
       content: currentFileContent.value,
-      commitMessage: `Обновление файла ${filename}`
+      commitMessage: `Обновление файла ${filename}`,
+      serverName: serverInfo.value?.name || null,
+      allFiles: null
     })
 
     await refreshTree()
-    addToast(res.data.output || `Файл ${filename} сохранён`, 'success')
+    addToast(`Файл ${filename} сохранён`, 'success')
   } catch (e) {
     addToast(e.response?.data?.message || e.message, 'error')
   }

@@ -17,6 +17,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
 
 @RestController
@@ -91,14 +92,17 @@ public class GitWriterController {
             String type = filename.endsWith(".tf") ? "terraform" :
                     (filename.endsWith(".yml") || filename.endsWith(".yaml")) ? "ansible" : null;
 
-            if (type != null) {
-                ValidationRequestDto validationRequest = new ValidationRequestDto(
+            if (type != null && request.getAllFiles() != null) {
+                List<ValidationRequestDto> allFiles = new ArrayList<>(request.getAllFiles());
+
+                allFiles.removeIf(f -> f.getFilename().equals(fullPath));
+                allFiles.add(new ValidationRequestDto(
                         fullPath,
                         request.getContent(),
                         request.getServerName()
-                );
+                ));
 
-                ValidationResultDto result = validationService.validate(type, validationRequest);
+                ValidationResultDto result = validationService.validate(type, allFiles);
                 if (!result.isValid()) {
                     return ResponseEntity.badRequest().body(result);
                 }

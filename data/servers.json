@@ -5,8 +5,8 @@
   "port" : 22,
   "password" : "izhn#_F-?3e8Y8",
   "status" : "Successful",
-  "ram" : "192 МБ / 957 МБ",
-  "cpu" : "0%"
+  "cpu" : "11.8%",
+  "ram" : "198 МБ / 957 МБ"
 }, {
   "name" : "test",
   "host" : "89.179.242.33",
@@ -14,6 +14,6 @@
   "port" : 22,
   "password" : "WiGtF2BE!",
   "status" : "Successful",
-  "ram" : "1439 МБ / 19994 МБ",
-  "cpu" : "11.4%"
+  "cpu" : "7.3%",
+  "ram" : "1430 МБ / 19994 МБ"
 } ]

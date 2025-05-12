@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import ru.backend.rest.git.dto.FileNodeDto;
 import ru.backend.rest.git.dto.GitCommitDto;
 import ru.backend.rest.git.dto.GitConnectionRequestDto;
+import ru.backend.rest.validation.dto.ValidationRequestDto;
 
 import java.io.File;
 import java.io.IOException;
@@ -353,5 +354,42 @@ public class GitWriterService {
         } finally {
             deleteDirectory(tempDir);
         }
+    }
+
+    public List<ValidationRequestDto> getAllTerraformFilesFromBranch(GitConnectionRequestDto repo, String branch) {
+        List<ValidationRequestDto> tfFiles = new ArrayList<>();
+        File tempDir = null;
+
+        try {
+            tempDir = Files.createTempDirectory("tf-read").toFile();
+            Git git = Git.cloneRepository()
+                    .setURI(repo.getRepoUrl())
+                    .setBranch(branch)
+                    .setDirectory(tempDir)
+                    .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                    .call();
+
+            final File finalTempDir = tempDir;
+            final String serverName = repo.getName();
+
+            Files.walk(finalTempDir.toPath())
+                    .filter(path -> path.toFile().isFile() && path.toString().endsWith(".tf"))
+                    .forEach(path -> {
+                        try {
+                            String content = Files.readString(path, StandardCharsets.UTF_8);
+                            String relativePath = finalTempDir.toPath().relativize(path).toString().replace("\\", "/");
+                            tfFiles.add(new ValidationRequestDto(relativePath, content, serverName));
+                        } catch (IOException e) {
+                            log.warn("Ошибка при чтении .tf файла {}", path, e);
+                        }
+                    });
+
+        } catch (Exception e) {
+            log.error("Ошибка при загрузке .tf файлов из ветки '{}': {}", branch, e.getMessage());
+        } finally {
+            if (tempDir != null) deleteDirectory(tempDir);
+        }
+
+        return tfFiles;
     }
 }
