@@ -176,8 +176,11 @@ public class TemplateValidationService {
     }
 
     private Map<String, Integer> extractVarsFromAllFiles(File dir, List<String> varNames) {
+        Map<String, Integer> declaredVars = new HashMap<>();
         Map<String, Integer> result = new HashMap<>();
-        Pattern pattern = Pattern.compile("variable\\s+\"(\\w+)\"\\s*\\{[^}]*?default\\s*=\\s*(\\d+)", Pattern.DOTALL);
+
+        Pattern variablePattern = Pattern.compile("variable\\s+\"(\\w+)\"\\s*\\{[^}]*?default\\s*=\\s*(\\d+)", Pattern.DOTALL);
+        Pattern usagePattern = Pattern.compile("var\\.(\\w+)");
 
         Queue<File> queue = new LinkedList<>();
         queue.add(dir);
@@ -190,17 +193,28 @@ public class TemplateValidationService {
             } else if (current.getName().endsWith(".tf")) {
                 try {
                     String content = Files.readString(current.toPath());
-                    Matcher matcher = pattern.matcher(content);
-                    while (matcher.find()) {
-                        String name = matcher.group(1);
-                        int value = Integer.parseInt(matcher.group(2));
-                        if (varNames.contains(name)) {
-                            result.put(name, value);
-                        }
+
+                    Matcher varMatcher = variablePattern.matcher(content);
+                    while (varMatcher.find()) {
+                        String name = varMatcher.group(1);
+                        int value = Integer.parseInt(varMatcher.group(2));
+                        declaredVars.put(name, value);
                     }
+
                 } catch (IOException e) {
                     log.warn("Ошибка чтения файла: {}", current.getName());
                 }
+            }
+        }
+
+        for (Map.Entry<String, Integer> entry : declaredVars.entrySet()) {
+            String name = entry.getKey().toLowerCase();
+            int value = entry.getValue();
+
+            if (name.contains("ram") || name.contains("memory")) {
+                result.put("ram", value);
+            } else if (name.contains("cpu") || name.contains("core")) {
+                result.put("cpu", value);
             }
         }
 
