@@ -262,11 +262,13 @@ const saveFile = async () => {
   const filename = currentFileName.value
   const type = detectType(filename)
 
-  if (type) {
+  let filesToValidate = []
+
+  if (type === 'terraform') {
     try {
       const allEntries = []
       const collectFiles = (node) => {
-        if (node.type === 'file' && node.name.endsWith('.tf')) {
+        if (node.type === 'file' && node.name.toLowerCase().endsWith('.tf')) {
           allEntries.push(node)
         }
         if (node.children) {
@@ -292,19 +294,38 @@ const saveFile = async () => {
           })
       )
 
-      const updatedFiles = allFiles.filter(Boolean).filter(f => f.filename !== filename)
-      updatedFiles.push({
+      filesToValidate = allFiles.filter(Boolean).filter(f => f.filename !== filename)
+      filesToValidate.push({
         filename,
         content: currentFileContent.value,
         serverName: serverInfo.value?.name || null
       })
 
-      const res = await api.post(`/validate/${type}`, updatedFiles)
+      const res = await api.post(`/validate/${type}`, filesToValidate)
       if (!res.data.valid) {
         addToast(res.data.output || 'Ошибка валидации', 'error')
         return
       }
 
+    } catch (e) {
+      const error = e.response?.data?.output || e.response?.data?.message || e.message
+      addToast(error || 'Ошибка валидации', 'error')
+      return
+    }
+
+  } else if (type === 'ansible') {
+    filesToValidate = [{
+      filename,
+      content: currentFileContent.value,
+      serverName: serverInfo.value?.name || null
+    }]
+
+    try {
+      const res = await api.post(`/validate/${type}`, filesToValidate)
+      if (!res.data.valid) {
+        addToast(res.data.output || 'Ошибка валидации', 'error')
+        return
+      }
     } catch (e) {
       const error = e.response?.data?.output || e.response?.data?.message || e.message
       addToast(error || 'Ошибка валидации', 'error')
@@ -318,7 +339,7 @@ const saveFile = async () => {
       content: currentFileContent.value,
       commitMessage: `Обновление файла ${filename}`,
       serverName: serverInfo.value?.name || null,
-      allFiles: null
+      allFiles: filesToValidate
     })
 
     await refreshTree()

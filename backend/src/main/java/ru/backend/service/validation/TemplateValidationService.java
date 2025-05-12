@@ -272,7 +272,9 @@ public class TemplateValidationService {
         File tempDir = null;
         try {
             new ObjectMapper(new YAMLFactory()).readTree(new ByteArrayInputStream(request.getContent().getBytes()));
+
             tempDir = Files.createTempDirectory("ansible-validate").toFile();
+
             File ymlFile = new File(tempDir, "playbook.yml");
             Files.writeString(ymlFile.toPath(), request.getContent());
 
@@ -289,15 +291,32 @@ public class TemplateValidationService {
                                 new String(syntax.getErrorStream().readAllBytes())));
             }
 
+            File configDir = new File(tempDir, ".config");
+            if (!configDir.mkdirs() && !configDir.exists()) {
+                throw new IOException("Не удалось создать .config для ansible-lint");
+            }
+
+            File configFile = new File(configDir, "ansible-lint.yml");
+            Files.writeString(configFile.toPath(), """
+                skip_list:
+                  - yaml[empty-lines]
+                  - yaml[line-length]
+                """
+            );
+
             ProcessBuilder lint = new ProcessBuilder(
                     "docker", "run", "--rm",
                     "-v", tempDir.getAbsolutePath() + ":/data",
-                    "cytopia/ansible-lint", "/data/playbook.yml"
+                    "cytopia/ansible-lint",
+                    "-c", "/data/.config/ansible-lint.yml",
+                    "/data/playbook.yml"
             );
+
             Process linter = lint.start();
             if (!linter.waitFor(20, TimeUnit.SECONDS)) {
                 return new ValidationResultDto(false, "Таймаут ansible-lint");
             }
+
             if (linter.exitValue() != 0) {
                 return new ValidationResultDto(false, "Ansible-lint ошибка", List.of(
                         new String(linter.getInputStream().readAllBytes()) +
