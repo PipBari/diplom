@@ -378,7 +378,14 @@ const createNewFile = () => {
     addToast('Имя файла не может быть пустым', 'error')
     return
   }
-  currentFileName.value = `${app.value.path}/${name}`.replace(/\/+/g, '/')
+
+  const basePath = contextMenu.value.node?.type === 'folder'
+      ? contextMenu.value.node.fullPath
+      : app.value.path
+
+  const fullPath = `${basePath}/${name}`.replace(/\/+/g, '/')
+
+  currentFileName.value = fullPath
   currentFileContent.value = ''
   showNewFileDialog.value = false
 }
