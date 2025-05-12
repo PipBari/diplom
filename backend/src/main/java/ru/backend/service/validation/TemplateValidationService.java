@@ -45,10 +45,17 @@ public class TemplateValidationService {
         File tempDir = null;
         try {
             tempDir = Files.createTempDirectory("tf-validate").toFile();
-
             File file = new File(tempDir, request.getFilename());
             if (!file.getParentFile().exists()) file.getParentFile().mkdirs();
             Files.writeString(file.toPath(), request.getContent(), StandardCharsets.UTF_8);
+
+            // Проверка синтаксиса каждого .tf файла
+            Map.Entry<String, String> syntaxError = findInvalidSyntaxFile(tempDir);
+            if (syntaxError != null) {
+                return new ValidationResultDto(false,
+                        "Terraform синтаксическая ошибка в файле: " + syntaxError.getKey(),
+                        List.of(syntaxError.getValue()));
+            }
 
             ProcessBuilder init = new ProcessBuilder(
                     "docker", "run", "--rm",
@@ -80,6 +87,7 @@ public class TemplateValidationService {
                 return new ValidationResultDto(false, "Terraform ошибка", List.of(stderr + stdout));
             }
 
+            // Проверка ресурсов
             if (request.getServerName() != null && !request.getServerName().isBlank()) {
                 ServersDto server = serversService.getAll().stream()
                         .filter(s -> s.getName().equals(request.getServerName()))
@@ -116,6 +124,42 @@ public class TemplateValidationService {
         } finally {
             if (tempDir != null) deleteDirectory(tempDir);
         }
+    }
+
+    private Map.Entry<String, String> findInvalidSyntaxFile(File dir) {
+        Queue<File> queue = new LinkedList<>();
+        queue.add(dir);
+
+        while (!queue.isEmpty()) {
+            File current = queue.poll();
+            if (current.isDirectory()) {
+                File[] children = current.listFiles();
+                if (children != null) Collections.addAll(queue, children);
+            } else if (current.getName().endsWith(".tf")) {
+                try {
+                    ProcessBuilder fmtCheck = new ProcessBuilder(
+                            "docker", "run", "--rm",
+                            "-v", current.getParentFile().getAbsolutePath() + ":/data",
+                            "hashicorp/terraform:light",
+                            "fmt", "-check", "/data/" + current.getName()
+                    );
+
+                    Process process = fmtCheck.start();
+                    boolean finished = process.waitFor(5, TimeUnit.SECONDS);
+                    String stderr = new String(process.getErrorStream().readAllBytes());
+                    String stdout = new String(process.getInputStream().readAllBytes());
+
+                    if (!finished || process.exitValue() != 0) {
+                        return Map.entry(current.getName(), stderr + stdout);
+                    }
+                } catch (Exception e) {
+                    log.error("Ошибка terraform fmt: {}", current.getName(), e);
+                    return Map.entry(current.getName(), e.getMessage());
+                }
+            }
+        }
+
+        return null;
     }
 
     public ValidationResultDto validateAnsible(ValidationRequestDto request) {
@@ -180,7 +224,6 @@ public class TemplateValidationService {
         Map<String, Integer> result = new HashMap<>();
 
         Pattern variablePattern = Pattern.compile("variable\\s+\"(\\w+)\"\\s*\\{[^}]*?default\\s*=\\s*(\\d+)", Pattern.DOTALL);
-        Pattern usagePattern = Pattern.compile("var\\.(\\w+)");
 
         Queue<File> queue = new LinkedList<>();
         queue.add(dir);
@@ -193,14 +236,12 @@ public class TemplateValidationService {
             } else if (current.getName().endsWith(".tf")) {
                 try {
                     String content = Files.readString(current.toPath());
-
                     Matcher varMatcher = variablePattern.matcher(content);
                     while (varMatcher.find()) {
                         String name = varMatcher.group(1);
                         int value = Integer.parseInt(varMatcher.group(2));
                         declaredVars.put(name, value);
                     }
-
                 } catch (IOException e) {
                     log.warn("Ошибка чтения файла: {}", current.getName());
                 }
@@ -213,7 +254,7 @@ public class TemplateValidationService {
 
             if (name.contains("ram") || name.contains("memory")) {
                 result.put("ram", value);
-            } else if (name.contains("cpu") || name.contains("core")) {
+            } else if (name.contains("cpu") || name.contains("core") || name.contains("vcpus")) {
                 result.put("cpu", value);
             }
         }
