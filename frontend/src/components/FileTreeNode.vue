@@ -57,8 +57,10 @@ const toggle = () => {
 }
 
 const onRightClick = (event) => {
+  event.stopPropagation()
   emit('context-menu', event, props.node)
 }
+
 </script>
 
 <style scoped>

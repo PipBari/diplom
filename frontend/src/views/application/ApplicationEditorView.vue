@@ -1,6 +1,6 @@
 <template>
   <div class="editor-layout">
-    <div class="file-tree" @contextmenu.self.prevent="showContextMenu($event, null)">
+    <div class="file-tree">
       <FileTreeNode
           v-for="child in rootEntry?.children || []"
           :key="child.fullPath"
@@ -8,7 +8,7 @@
           :fullPath="child.fullPath"
           :depth="0"
           @open-file="loadEntry"
-          @context-menu="showContextMenu"
+          @context-menu="(event, node) => showContextMenu(event, node)"
       />
     </div>
 
@@ -45,11 +45,15 @@
         <button v-if="serverInfo" @click="generateGitflow">Gitflow 🚀</button>
       </div>
 
-      <textarea
-          v-if="currentFileContent !== null"
-          v-model="currentFileContent"
-          class="editor-textarea"
-      />
+      <div style="width: 100%; height: 100%; min-width: 0;">
+        <MonacoEditor
+            v-if="currentFileContent !== null"
+            v-model:value="currentFileContent"
+            :language="getLanguageForFile(currentFileName)"
+            theme="vs"
+            class="editor-textarea"
+        />
+      </div>
     </div>
 
     <div
@@ -115,6 +119,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api/axios'
 import FileTreeNode from '@/components/FileTreeNode.vue'
+import MonacoEditor from '@guolao/vue-monaco-editor'
 import '@/assets/styles/application/ApplicationEditorView.css'
 
 const server = ref(null)
@@ -219,7 +224,16 @@ const refreshTree = async () => {
 const enrichEntry = (entry, parentPath) => {
   entry.fullPath = parentPath ? `${parentPath}/${entry.name}` : entry.name
   entry.fullPath = entry.fullPath.replace(/\/+/g, '/')
-  if (entry.children) {
+
+  if (!entry.children) {
+    entry.children = []
+  }
+
+  if (entry.type === 'folder' && entry.children.length === 0) {
+    entry.children = []
+  }
+
+  if (entry.children && Array.isArray(entry.children)) {
     entry.children = entry.children
         .map(child => enrichEntry(child, entry.fullPath))
         .sort((a, b) => {
@@ -228,6 +242,7 @@ const enrichEntry = (entry, parentPath) => {
           return a.name.localeCompare(b.name)
         })
   }
+
   return entry
 }
 
@@ -372,6 +387,12 @@ const detectType = (filename) => {
   return null
 }
 
+const getLanguageForFile = (filename) => {
+  if (filename.endsWith('.tf')) return 'hcl'
+  if (filename.endsWith('.yaml') || filename.endsWith('.yml')) return 'yaml'
+  return 'plaintext'
+}
+
 const openNewFileDialog = () => {
   showNewFileDialog.value = true
   contextMenu.value.visible = false
@@ -414,6 +435,7 @@ const renameEntry = async () => {
 }
 
 const showContextMenu = (event, node) => {
+  event.preventDefault()
   contextMenu.value = {
     visible: true,
     x: event.clientX,
