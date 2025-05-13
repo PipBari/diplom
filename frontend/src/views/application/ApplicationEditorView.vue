@@ -42,7 +42,7 @@
       <div class="editor-header">
         <span>{{ currentFileName || 'Выберите файл' }}</span>
         <button v-if="currentFileContent !== null" @click="saveFile">Сохранить</button>
-        <button v-if="serverInfo" @click="generateGitflow">Gitflow 🚀</button>
+        <button v-if="serverInfo" @click="generateGitflow">Workflows</button>
       </div>
 
       <div style="width: 100%; height: 100%; min-width: 0;">
@@ -229,12 +229,9 @@ const enrichEntry = (entry, parentPath) => {
     entry.children = []
   }
 
-  if (entry.type === 'folder' && entry.children.length === 0) {
-    entry.children = []
-  }
-
   if (entry.children && Array.isArray(entry.children)) {
     entry.children = entry.children
+        .filter(child => child.name !== '.gitkeep')
         .map(child => enrichEntry(child, entry.fullPath))
         .sort((a, b) => {
           if (a.type === 'folder' && b.type !== 'folder') return -1
