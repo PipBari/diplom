@@ -16,6 +16,9 @@
         <template v-else-if="node.name.endsWith('.yml') || node.name.endsWith('.yaml')">
           <img src="@/assets/icons/ansible.svg" class="file-icon" alt="Ansible" />
         </template>
+        <template v-else-if="node.name.endsWith('.sh')">
+          <img src="@/assets/icons/bash.svg" class="file-icon" alt="Bash" />
+        </template>
         <template v-else>📄</template>
       </span>
       <span class="file-name">{{ node.name }}</span>

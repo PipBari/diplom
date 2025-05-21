@@ -33,7 +33,6 @@
     background-color: #4d5a6a;
 }
 
-/* Сетка: ИМЯ - ХОСТ - RAM - CPU - ⋮ */
 .server-settings .table-header {
     display: grid;
     grid-template-columns: 1fr 1.5fr 1fr 1fr 1.5fr 0.5fr;

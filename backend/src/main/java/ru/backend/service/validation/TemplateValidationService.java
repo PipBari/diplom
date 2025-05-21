@@ -32,6 +32,9 @@ public class TemplateValidationService {
                 return validateTerraform(requests);
             case "ansible":
                 return validateAnsible(requests.get(0));
+            case "bash":
+            case "shell":
+                return validateBash(requests.get(0));
             default:
                 return new ValidationResultDto(true, "OK (валидация не требуется)");
         }
@@ -328,6 +331,36 @@ public class TemplateValidationService {
         } catch (Exception e) {
             log.error("Ansible validation failed", e);
             return new ValidationResultDto(false, "Ansible ошибка: " + e.getMessage());
+        } finally {
+            if (tempDir != null) deleteDirectory(tempDir);
+        }
+    }
+
+    public ValidationResultDto validateBash(ValidationRequestDto request) {
+        File tempDir = null;
+        try {
+            tempDir = Files.createTempDirectory("bash-validate").toFile();
+            File scriptFile = new File(tempDir, "script.sh");
+            Files.writeString(scriptFile.toPath(), request.getContent(), StandardCharsets.UTF_8);
+
+            scriptFile.setExecutable(true);
+
+            ProcessBuilder syntaxCheck = new ProcessBuilder("bash", "-n", scriptFile.getAbsolutePath());
+            Process process = syntaxCheck.start();
+
+            if (!process.waitFor(10, TimeUnit.SECONDS)) {
+                return new ValidationResultDto(false, "Таймаут проверки bash-скрипта");
+            }
+
+            String errors = new String(process.getErrorStream().readAllBytes());
+            if (process.exitValue() != 0) {
+                return new ValidationResultDto(false, "Bash синтаксическая ошибка", List.of(errors));
+            }
+
+            return new ValidationResultDto(true, "Bash: OK");
+        } catch (Exception e) {
+            log.error("Bash validation failed", e);
+            return new ValidationResultDto(false, "Bash ошибка: " + e.getMessage());
         } finally {
             if (tempDir != null) deleteDirectory(tempDir);
         }

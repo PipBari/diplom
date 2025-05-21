@@ -343,6 +343,25 @@ const saveFile = async () => {
       addToast(error || 'Ошибка валидации', 'error')
       return
     }
+
+  } else if (type === 'bash') {
+    filesToValidate = [{
+      filename,
+      content: currentFileContent.value,
+      serverName: serverInfo.value?.name || null
+    }]
+
+    try {
+      const res = await api.post(`/validate/${type}`, filesToValidate)
+      if (!res.data.valid) {
+        addToast(res.data.output || 'Ошибка валидации', 'error')
+        return
+      }
+    } catch (e) {
+      const error = e.response?.data?.output || e.response?.data?.message || e.message
+      addToast(error || 'Ошибка валидации', 'error')
+      return
+    }
   }
 
   try {
@@ -381,12 +400,14 @@ const revertCommit = async (commit) => {
 const detectType = (filename) => {
   if (filename.endsWith('.tf')) return 'terraform'
   if (filename.endsWith('.yml') || filename.endsWith('.yaml')) return 'ansible'
+  if (filename.endsWith('.sh')) return 'bash'
   return null
 }
 
 const getLanguageForFile = (filename) => {
   if (filename.endsWith('.tf')) return 'hcl'
   if (filename.endsWith('.yaml') || filename.endsWith('.yml')) return 'yaml'
+  if (filename.endsWith('.sh')) return 'shell'
   return 'plaintext'
 }
 

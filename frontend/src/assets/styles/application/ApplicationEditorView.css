@@ -74,7 +74,7 @@
 
 .status-block {
     background: #f4f4f4;
-    border-left: 4px solid #4caf50;
+    border-left: 4px solid green;
 }
 
 .error-block {
@@ -126,11 +126,11 @@
 }
 
 .context-item:hover {
-    background-color: #f0f0f0;
+    background-color: white;
 }
 
 .context-item.danger {
-    color: #b00020;
+    color: red;
 }
 
 .context-menu {
@@ -139,7 +139,7 @@
     border: 1px solid #ccc;
     border-radius: 4px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-    z-index: 9999; /* Обязательно выше всех */
+    z-index: 9999;
     padding: 4px 0;
     min-width: 160px;
     font-size: 14px;
@@ -152,11 +152,11 @@
 }
 
 .context-item:hover {
-    background-color: #f0f0f0;
+    background-color: white;
 }
 
 .context-item.danger {
-    color: #b00020;
+    color: red;
 }
 
 .file-node {
@@ -267,11 +267,11 @@
 }
 
 .toast.success {
-    background-color: #4caf50;
+    background-color: green;
 }
 
 .toast.error {
-    background-color: #e53935;
+    background-color: red;
 }
 
 .server-status-inline {
@@ -289,12 +289,12 @@
 }
 
 .status-success {
-    color: #4caf50;
+    color: green;
     margin: 0 4px;
 }
 
 .status-failed {
-    color: #e53935;
+    color: red;
     margin: 0 4px;
 }
 

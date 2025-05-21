@@ -4,8 +4,8 @@
   "branch" : "master",
   "path" : "my-app",
   "projectName" : "configs_new",
-  "serverName" : "new",
+  "serverName" : "",
   "syncStrategy" : "auto",
-  "createdAt" : "2025-05-12T07:32:53.422Z",
+  "createdAt" : "2025-05-21T13:36:17.433Z",
   "status" : "Synced"
 } ]
