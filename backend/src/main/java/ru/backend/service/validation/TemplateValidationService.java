@@ -341,25 +341,38 @@ public class TemplateValidationService {
         try {
             tempDir = Files.createTempDirectory("bash-validate").toFile();
             File scriptFile = new File(tempDir, "script.sh");
-            Files.writeString(scriptFile.toPath(), request.getContent(), StandardCharsets.UTF_8);
 
-            scriptFile.setExecutable(true);
+            String cleaned = request.getContent().replaceAll("\\r\\n?", "\n");
+            if (!cleaned.endsWith("\n")) cleaned += "\n";
+            Files.writeString(scriptFile.toPath(), cleaned, StandardCharsets.UTF_8);
 
-            ProcessBuilder syntaxCheck = new ProcessBuilder("bash", "-n", scriptFile.getAbsolutePath());
-            Process process = syntaxCheck.start();
+            ProcessBuilder builder = new ProcessBuilder(
+                    "docker", "run", "--rm",
+                    "-v", tempDir.getAbsolutePath() + ":/data",
+                    "koalaman/shellcheck",
+                    "/data/script.sh"
+            );
 
-            if (!process.waitFor(10, TimeUnit.SECONDS)) {
+            Process process = builder.start();
+            boolean finished = process.waitFor(15, TimeUnit.SECONDS);
+            String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+            String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+
+            log.info("[SHELLCHECK STDOUT]:\n{}", stdout);
+            log.info("[SHELLCHECK STDERR]:\n{}", stderr);
+
+            if (!finished) {
                 return new ValidationResultDto(false, "Таймаут проверки bash-скрипта");
             }
 
-            String errors = new String(process.getErrorStream().readAllBytes());
             if (process.exitValue() != 0) {
-                return new ValidationResultDto(false, "Bash синтаксическая ошибка", List.of(errors));
+                return new ValidationResultDto(false, "Bash синтаксическая ошибка", List.of(stdout + stderr));
             }
 
             return new ValidationResultDto(true, "Bash: OK");
+
         } catch (Exception e) {
-            log.error("Bash validation failed", e);
+            log.error("Shellcheck validation failed", e);
             return new ValidationResultDto(false, "Bash ошибка: " + e.getMessage());
         } finally {
             if (tempDir != null) deleteDirectory(tempDir);
