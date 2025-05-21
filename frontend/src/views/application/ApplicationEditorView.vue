@@ -1,7 +1,7 @@
 <template>
   <div class="editor-layout">
-    <div class="file-tree">
-      <FileTreeNode
+    <div class="file-tree" @contextmenu.prevent="showContextMenu($event, null)">
+    <FileTreeNode
           v-for="child in rootEntry?.children || []"
           :key="child.fullPath"
           :node="child"
@@ -473,9 +473,17 @@ const createNewFile = () => {
     return
   }
 
-  const basePath = contextMenu.value.node?.type === 'folder'
-      ? contextMenu.value.node.fullPath
-      : app.value.path
+  let basePath = app.value.path
+
+  if (contextMenu.value.node) {
+    if (contextMenu.value.node.type === 'folder') {
+      basePath = contextMenu.value.node.fullPath
+    } else {
+      const parts = contextMenu.value.node.fullPath.split('/')
+      parts.pop()
+      basePath = parts.join('/')
+    }
+  }
 
   const fullPath = `${basePath}/${name}`.replace(/\/+/g, '/')
 
@@ -491,9 +499,17 @@ const createNewFolder = async () => {
     return
   }
 
-  const basePath = contextMenu.value.node?.type === 'folder'
-      ? contextMenu.value.node.fullPath
-      : app.value.path
+  let basePath = app.value.path
+
+  if (contextMenu.value.node) {
+    if (contextMenu.value.node.type === 'folder') {
+      basePath = contextMenu.value.node.fullPath
+    } else {
+      const parts = contextMenu.value.node.fullPath.split('/')
+      parts.pop()
+      basePath = parts.join('/')
+    }
+  }
 
   const fullPath = `${basePath}/${name}`.replace(/\/+/g, '/')
 
