@@ -10,6 +10,8 @@ import ru.backend.rest.application.dto.ApplicationDto;
 import ru.backend.rest.git.dto.FileNodeDto;
 import ru.backend.rest.git.dto.GitConnectionRequestDto;
 import ru.backend.rest.settings.dto.ServersDto;
+import ru.backend.service.application.ApplicationService;
+import ru.backend.service.settings.ServersService;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -22,6 +24,9 @@ import java.util.Properties;
 public class GitflowGeneratorService {
 
     private final GitWriterService gitWriterService;
+    private final ApplicationService applicationService;
+    private final GitService gitService;
+    private final ServersService serversService;
 
     public void generate(ApplicationDto app, ServersDto server, GitConnectionRequestDto repo)
             throws IOException, GitAPIException {
@@ -241,5 +246,29 @@ public class GitflowGeneratorService {
         }
 
         channel.disconnect();
+    }
+
+    public void generateGitflow(String appName) throws IOException, GitAPIException {
+        ApplicationDto app = applicationService.getAll().stream()
+                .filter(a -> a.getName().equals(appName))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Приложение не найдено: " + appName));
+
+        if (app.getRepoName() == null || app.getBranch() == null || app.getPath() == null) {
+            throw new IllegalArgumentException("У приложения отсутствуют repoName, branch или path");
+        }
+
+        GitConnectionRequestDto repo = gitService.getByName(app.getRepoName());
+
+        if (app.getServerName() == null || app.getServerName().isBlank()) {
+            throw new IllegalArgumentException("Сервер не указан у приложения");
+        }
+
+        ServersDto server = serversService.getAll().stream()
+                .filter(s -> s.getName().equals(app.getServerName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Сервер не найден: " + app.getServerName()));
+
+        this.generate(app, server, repo);
     }
 }

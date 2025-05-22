@@ -1,1 +1,10 @@
-[ ]
+[ {
+  "name" : "test",
+  "host" : "147.45.149.212",
+  "specify_username" : "root",
+  "port" : 22,
+  "password" : "bXyvNC2-F?_ULY",
+  "status" : "Error",
+  "ram" : "-",
+  "cpu" : "-"
+} ]

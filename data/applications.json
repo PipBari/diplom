@@ -1,11 +1,11 @@
 [ {
-  "name" : "test",
+  "name" : "infra",
   "repoName" : "configs",
   "branch" : "master",
   "path" : "my-app",
   "projectName" : "configs_new",
-  "serverName" : "",
+  "serverName" : "test",
   "syncStrategy" : "auto",
-  "createdAt" : "2025-05-21T13:36:17.433Z",
+  "createdAt" : "2025-05-22T16:41:01.907Z",
   "status" : "Synced"
 } ]

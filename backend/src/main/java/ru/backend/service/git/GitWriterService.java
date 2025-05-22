@@ -10,9 +10,13 @@ import org.springframework.stereotype.Service;
 import ru.backend.rest.git.dto.FileNodeDto;
 import ru.backend.rest.git.dto.GitCommitDto;
 import ru.backend.rest.git.dto.GitConnectionRequestDto;
+import ru.backend.rest.git.dto.GitFileSaveRequest;
 import ru.backend.rest.validation.dto.ValidationRequestDto;
+import ru.backend.rest.validation.dto.ValidationResultDto;
+import ru.backend.service.validation.TemplateValidationService;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -356,40 +360,68 @@ public class GitWriterService {
         }
     }
 
-    public List<ValidationRequestDto> getAllTerraformFilesFromBranch(GitConnectionRequestDto repo, String branch) {
-        List<ValidationRequestDto> tfFiles = new ArrayList<>();
-        File tempDir = null;
+    public ValidationResultDto saveFileWithValidation(
+            GitConnectionRequestDto repo,
+            String branch,
+            GitFileSaveRequest request,
+            TemplateValidationService validationService
+    ) throws IOException, GitAPIException {
 
-        try {
-            tempDir = Files.createTempDirectory("tf-read").toFile();
-            Git git = Git.cloneRepository()
-                    .setURI(repo.getRepoUrl())
-                    .setBranch(branch)
-                    .setDirectory(tempDir)
-                    .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
-                    .call();
+        String fullPath = request.getPath();
+        String filename = fullPath.contains("/") ? fullPath.substring(fullPath.lastIndexOf('/') + 1) : fullPath;
+        String folderPath = fullPath.contains("/") ? fullPath.substring(0, fullPath.lastIndexOf('/')) : "";
 
-            final File finalTempDir = tempDir;
-            final String serverName = repo.getName();
-
-            Files.walk(finalTempDir.toPath())
-                    .filter(path -> path.toFile().isFile() && path.toString().endsWith(".tf"))
-                    .forEach(path -> {
-                        try {
-                            String content = Files.readString(path, StandardCharsets.UTF_8);
-                            String relativePath = finalTempDir.toPath().relativize(path).toString().replace("\\", "/");
-                            tfFiles.add(new ValidationRequestDto(relativePath, content, serverName));
-                        } catch (IOException e) {
-                            log.warn("Ошибка при чтении .tf файла {}", path, e);
-                        }
-                    });
-
-        } catch (Exception e) {
-            log.error("Ошибка при загрузке .tf файлов из ветки '{}': {}", branch, e.getMessage());
-        } finally {
-            if (tempDir != null) deleteDirectory(tempDir);
+        String type = null;
+        if (filename.endsWith(".tf")) {
+            type = "terraform";
+        } else if (filename.endsWith(".yml") || filename.endsWith(".yaml")) {
+            type = "ansible";
+        } else if (filename.endsWith(".sh")) {
+            type = "bash";
         }
+        if (type != null && request.getAllFiles() != null) {
+            List<ValidationRequestDto> allFiles = new ArrayList<>(request.getAllFiles());
+            allFiles.removeIf(f -> f.getFilename().equals(fullPath));
+            allFiles.add(new ValidationRequestDto(
+                    fullPath,
+                    request.getContent(),
+                    request.getServerName()
+            ));
+            ValidationResultDto result = validationService.validate(type, allFiles);
+            if (!result.isValid()) {
+                return result;
+            }
+        }
+        this.pushFile(
+                repo,
+                branch,
+                folderPath,
+                filename,
+                request.getContent(),
+                request.getCommitMessage()
+        );
 
-        return tfFiles;
+        return new ValidationResultDto(true, "Файл сохранён в Git");
+    }
+
+    public String getFileContent(GitConnectionRequestDto repo, String branch, String path) throws IOException, GitAPIException {
+        File tempDir = Files.createTempDirectory("repo-read").toFile();
+        try (Git git = Git.cloneRepository()
+                .setURI(repo.getRepoUrl())
+                .setBranch(branch)
+                .setDirectory(tempDir)
+                .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                .call()) {
+
+            File targetFile = new File(tempDir, path);
+            if (!targetFile.exists() || targetFile.isDirectory()) {
+                throw new FileNotFoundException("Файл не найден: " + path);
+            }
+
+            return Files.readString(targetFile.toPath(), StandardCharsets.UTF_8);
+
+        } finally {
+            deleteDirectory(tempDir);
+        }
     }
 }

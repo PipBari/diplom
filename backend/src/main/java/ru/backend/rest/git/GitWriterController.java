@@ -14,6 +14,7 @@ import ru.backend.service.git.GitWriterService;
 import ru.backend.service.validation.TemplateValidationService;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -85,41 +86,12 @@ public class GitWriterController {
         GitConnectionRequestDto repo = gitService.getByName(name);
 
         try {
-            String fullPath = request.getPath();
-            String filename = fullPath.contains("/") ? fullPath.substring(fullPath.lastIndexOf('/') + 1) : fullPath;
-            String folderPath = fullPath.contains("/") ? fullPath.substring(0, fullPath.lastIndexOf('/')) : "";
-
-            String type = filename.endsWith(".tf") ? "terraform" :
-                    (filename.endsWith(".yml") || filename.endsWith(".yaml")) ? "ansible" : null;
-
-            if (type != null && request.getAllFiles() != null) {
-                List<ValidationRequestDto> allFiles = new ArrayList<>(request.getAllFiles());
-
-                allFiles.removeIf(f -> f.getFilename().equals(fullPath));
-                allFiles.add(new ValidationRequestDto(
-                        fullPath,
-                        request.getContent(),
-                        request.getServerName()
-                ));
-
-                ValidationResultDto result = validationService.validate(type, allFiles);
-                if (!result.isValid()) {
-                    return ResponseEntity.badRequest().body(result);
-                }
+            ValidationResultDto result = gitWriterService.saveFileWithValidation(repo, branch, request, validationService);
+            if (!result.isValid()) {
+                return ResponseEntity.badRequest().body(result);
             }
-
-            gitWriterService.pushFile(
-                    repo,
-                    branch,
-                    folderPath,
-                    filename,
-                    request.getContent(),
-                    request.getCommitMessage()
-            );
-
-            return ResponseEntity.ok(new ValidationResultDto(true, "Файл сохранён в Git"));
-
-        } catch (IOException | GitAPIException e) {
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
             return ResponseEntity.status(500)
                     .body(new ValidationResultDto(false, "Ошибка при сохранении: " + e.getMessage()));
         }
@@ -132,30 +104,13 @@ public class GitWriterController {
             @RequestParam String path
     ) {
         GitConnectionRequestDto repo = gitService.getByName(name);
-        File tempDir = null;
         try {
-            tempDir = Files.createTempDirectory("repo-read").toFile();
-            Git.cloneRepository()
-                    .setURI(repo.getRepoUrl())
-                    .setBranch(branch)
-                    .setDirectory(tempDir)
-                    .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
-                    .call();
-
-            File targetFile = new File(tempDir, path);
-            if (!targetFile.exists() || targetFile.isDirectory()) {
-                return ResponseEntity.notFound().build();
-            }
-
-            String content = Files.readString(targetFile.toPath(), StandardCharsets.UTF_8);
+            String content = gitWriterService.getFileContent(repo, branch, path);
             return ResponseEntity.ok(content);
-
+        } catch (FileNotFoundException e) {
+            return ResponseEntity.notFound().build();
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Ошибка чтения файла: " + e.getMessage());
-        } finally {
-            if (tempDir != null) {
-                System.out.println("Временная папка не удалена: " + tempDir.getAbsolutePath());
-            }
         }
     }
 
