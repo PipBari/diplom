@@ -61,6 +61,7 @@ public class GitflowGeneratorService {
 
         boolean hasTerraform = files.stream().anyMatch(f -> f.getName().endsWith(".tf"));
         boolean hasAnsible = files.stream().anyMatch(f -> f.getName().endsWith(".yml") || f.getName().endsWith(".yaml"));
+        boolean hasBash = files.stream().anyMatch(f -> f.getName().endsWith(".sh"));
 
         StringBuilder sb = new StringBuilder();
         sb.append("#!/bin/bash\n");
@@ -117,8 +118,20 @@ public class GitflowGeneratorService {
             sb.append("fi\n\n");
         }
 
-        if (!hasTerraform && !hasAnsible) {
-            sb.append("echo 'Ни Terraform, ни Ansible не найдены. Деплой пропущен.'\n");
+        if (hasBash) {
+            sb.append("echo 'Поиск и выполнение Bash-скриптов'\n");
+            sb.append("find . -type f -name \"*.sh\" | while read sh_file; do\n");
+            sb.append("  if [[ \"$sh_file\" == *\"/deploy.sh\" ]]; then\n");
+            sb.append("    echo \"Пропуск самого deploy.sh\"\n");
+            sb.append("    continue\n");
+            sb.append("  fi\n");
+            sb.append("  echo \"→ Запуск bash: $sh_file\"\n");
+            sb.append("  bash \"$sh_file\" || echo \"⚠ Ошибка при выполнении $sh_file\"\n");
+            sb.append("done\n\n");
+        }
+
+        if (!hasTerraform && !hasAnsible && !hasBash) {
+            sb.append("echo 'Нет Terraform, Ansible или Bash-скриптов. Деплой пропущен.'\n");
             sb.append("exit 0\n");
         }
 
