@@ -18,20 +18,33 @@ public class ProjectsController {
     }
 
     @GetMapping
-    public ResponseEntity<List<ProjectDto>> getAll() {
-        return ResponseEntity.ok(projectService.getAll());
+    public ResponseEntity<?> getAll() {
+        try {
+            List<ProjectDto> result = projectService.getAll();
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка получения списка проектов: " + e.getMessage());
+        }
     }
 
     @PostMapping
     public ResponseEntity<String> add(@RequestBody ProjectDto project) {
-        projectService.save(project);
-        return ResponseEntity.ok("Проект добавлен");
+        try {
+            projectService.save(project);
+            return ResponseEntity.ok("Проект добавлен");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка при добавлении проекта: " + e.getMessage());
+        }
     }
 
     @DeleteMapping("/{name}")
     public ResponseEntity<String> delete(@PathVariable String name) {
-        projectService.delete(name);
-        return ResponseEntity.ok("Проект удалён");
+        try {
+            projectService.delete(name);
+            return ResponseEntity.ok("Проект удалён");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка при удалении проекта: " + e.getMessage());
+        }
     }
 
     @PutMapping("/{name}")
@@ -40,7 +53,9 @@ public class ProjectsController {
             projectService.update(name, project);
             return ResponseEntity.ok("Проект обновлён");
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body("Ошибка в аргументах: " + e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка при обновлении проекта: " + e.getMessage());
         }
     }
 }

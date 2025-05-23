@@ -18,26 +18,42 @@ public class ApplicationController {
     }
 
     @GetMapping
-    public ResponseEntity<List<ApplicationDto>> getAll() {
-        return ResponseEntity.ok(applicationService.getAll());
+    public ResponseEntity<?> getAll() {
+        try {
+            List<ApplicationDto> result = applicationService.getAll();
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка получения приложений: " + e.getMessage());
+        }
     }
 
     @PostMapping
     public ResponseEntity<String> add(@RequestBody ApplicationDto request) {
-        applicationService.save(request);
-        return ResponseEntity.ok("Приложение добавлено");
+        try {
+            applicationService.save(request);
+            return ResponseEntity.ok("Приложение добавлено");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка при добавлении: " + e.getMessage());
+        }
     }
 
     @DeleteMapping("/{name}")
     public ResponseEntity<String> delete(@PathVariable String name) {
-        applicationService.delete(name);
-        return ResponseEntity.ok("Приложение удалено");
+        try {
+            applicationService.delete(name);
+            return ResponseEntity.ok("Приложение удалено");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка при удалении: " + e.getMessage());
+        }
     }
 
     @PostMapping("/{name}/status")
     public ResponseEntity<String> recheckStatus(@PathVariable String name) {
-        String status = applicationService.recheckStatus(name);
-        return ResponseEntity.ok("Статус обновлён: " + status);
+        try {
+            String status = applicationService.recheckStatus(name);
+            return ResponseEntity.ok("Статус обновлён: " + status);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка обновления статуса: " + e.getMessage());
+        }
     }
 }
-

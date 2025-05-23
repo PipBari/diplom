@@ -2,8 +2,6 @@ package ru.backend.rest.git;
 
 import lombok.RequiredArgsConstructor;
 import org.eclipse.jgit.api.errors.GitAPIException;
-import org.eclipse.jgit.api.Git;
-import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import ru.backend.rest.git.dto.*;
@@ -13,12 +11,8 @@ import ru.backend.service.git.GitService;
 import ru.backend.service.git.GitWriterService;
 import ru.backend.service.validation.TemplateValidationService;
 
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.util.ArrayList;
 import java.util.List;
 
 @RestController
@@ -31,50 +25,70 @@ public class GitWriterController {
     private final TemplateValidationService validationService;
 
     @GetMapping("/{name}/branch/{branch}/exists")
-    public ResponseEntity<Boolean> branchExists(@PathVariable String name, @PathVariable String branch) {
-        GitConnectionRequestDto repo = gitService.getByName(name);
-        return ResponseEntity.ok(gitWriterService.branchExists(repo, branch));
+    public ResponseEntity<?> branchExists(@PathVariable String name, @PathVariable String branch) {
+        try {
+            GitConnectionRequestDto repo = gitService.getByName(name);
+            return ResponseEntity.ok(gitWriterService.branchExists(repo, branch));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка проверки ветки: " + e.getMessage());
+        }
     }
 
     @GetMapping("/{name}/branch/{branch}/path/exists")
-    public ResponseEntity<Boolean> pathExists(
+    public ResponseEntity<?> pathExists(
             @PathVariable String name,
             @PathVariable String branch,
             @RequestParam String path
     ) {
-        GitConnectionRequestDto repo = gitService.getByName(name);
-        return ResponseEntity.ok(gitWriterService.pathExists(repo, branch, path));
+        try {
+            GitConnectionRequestDto repo = gitService.getByName(name);
+            return ResponseEntity.ok(gitWriterService.pathExists(repo, branch, path));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка проверки пути: " + e.getMessage());
+        }
     }
 
     @GetMapping("/{name}/branch/{branch}/folders")
-    public ResponseEntity<List<String>> listFolders(
+    public ResponseEntity<?> listFolders(
             @PathVariable String name,
             @PathVariable String branch,
             @RequestParam(defaultValue = "") String basePath
     ) {
-        GitConnectionRequestDto repo = gitService.getByName(name);
-        return ResponseEntity.ok(gitWriterService.listFolders(repo, branch, basePath));
+        try {
+            GitConnectionRequestDto repo = gitService.getByName(name);
+            return ResponseEntity.ok(gitWriterService.listFolders(repo, branch, basePath));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка получения списка папок: " + e.getMessage());
+        }
     }
 
     @GetMapping("/{name}/branch/{branch}/tree")
-    public ResponseEntity<List<FileNodeDto>> listFiles(
+    public ResponseEntity<?> listFiles(
             @PathVariable String name,
             @PathVariable String branch,
             @RequestParam(defaultValue = "") String path
     ) {
-        GitConnectionRequestDto repo = gitService.getByName(name);
-        return ResponseEntity.ok(gitWriterService.listFiles(repo, branch, path));
+        try {
+            GitConnectionRequestDto repo = gitService.getByName(name);
+            return ResponseEntity.ok(gitWriterService.listFiles(repo, branch, path));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка получения списка файлов: " + e.getMessage());
+        }
     }
 
     @GetMapping("/{name}/branch/{branch}/entry")
-    public ResponseEntity<FileNodeDto> getEntry(
+    public ResponseEntity<?> getEntry(
             @PathVariable String name,
             @PathVariable String branch,
             @RequestParam String path
     ) {
-        GitConnectionRequestDto repo = gitService.getByName(name);
-        FileNodeDto entry = gitWriterService.readEntry(repo, branch, path);
-        return ResponseEntity.ok(entry);
+        try {
+            GitConnectionRequestDto repo = gitService.getByName(name);
+            FileNodeDto entry = gitWriterService.readEntry(repo, branch, path);
+            return ResponseEntity.ok(entry);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка получения элемента: " + e.getMessage());
+        }
     }
 
     @PostMapping("/{name}/branch/{branch}/save")
@@ -83,9 +97,8 @@ public class GitWriterController {
             @PathVariable String branch,
             @RequestBody GitFileSaveRequest request
     ) {
-        GitConnectionRequestDto repo = gitService.getByName(name);
-
         try {
+            GitConnectionRequestDto repo = gitService.getByName(name);
             ValidationResultDto result = gitWriterService.saveFileWithValidation(repo, branch, request, validationService);
             if (!result.isValid()) {
                 return ResponseEntity.badRequest().body(result);
@@ -98,13 +111,13 @@ public class GitWriterController {
     }
 
     @GetMapping("/{name}/branch/{branch}/file")
-    public ResponseEntity<String> getFileContent(
+    public ResponseEntity<?> getFileContent(
             @PathVariable String name,
             @PathVariable String branch,
             @RequestParam String path
     ) {
-        GitConnectionRequestDto repo = gitService.getByName(name);
         try {
+            GitConnectionRequestDto repo = gitService.getByName(name);
             String content = gitWriterService.getFileContent(repo, branch, path);
             return ResponseEntity.ok(content);
         } catch (FileNotFoundException e) {
@@ -115,15 +128,19 @@ public class GitWriterController {
     }
 
     @GetMapping("/{name}/branch/{branch}/commits")
-    public ResponseEntity<List<GitCommitDto>> getCommits(
+    public ResponseEntity<?> getCommits(
             @PathVariable String name,
             @PathVariable String branch,
             @RequestParam String path,
             @RequestParam(defaultValue = "5") int limit
     ) {
-        GitConnectionRequestDto repo = gitService.getByName(name);
-        List<GitCommitDto> commits = gitWriterService.getRecentCommits(repo, branch, path, limit);
-        return ResponseEntity.ok(commits);
+        try {
+            GitConnectionRequestDto repo = gitService.getByName(name);
+            List<GitCommitDto> commits = gitWriterService.getRecentCommits(repo, branch, path, limit);
+            return ResponseEntity.ok(commits);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка получения коммитов: " + e.getMessage());
+        }
     }
 
     @PostMapping("/{name}/branch/{branch}/create-folder")
@@ -132,12 +149,13 @@ public class GitWriterController {
             @PathVariable String branch,
             @RequestBody GitCreateFolderRequest request
     ) {
-        GitConnectionRequestDto repo = gitService.getByName(name);
-
         try {
+            GitConnectionRequestDto repo = gitService.getByName(name);
             gitWriterService.createFolder(repo, branch, request.getPath(), request.getCommitMessage());
             return ResponseEntity.ok("Папка успешно создана");
         } catch (IOException | GitAPIException e) {
+            return ResponseEntity.status(500).body("Ошибка при создании папки: " + e.getMessage());
+        } catch (Exception e) {
             return ResponseEntity.status(500).body("Ошибка при создании папки: " + e.getMessage());
         }
     }
@@ -149,8 +167,8 @@ public class GitWriterController {
             @RequestParam String path,
             @RequestParam(defaultValue = "Удаление") String commitMessage
     ) {
-        GitConnectionRequestDto repo = gitService.getByName(name);
         try {
+            GitConnectionRequestDto repo = gitService.getByName(name);
             gitWriterService.deletePath(repo, branch, path, commitMessage);
             return ResponseEntity.ok("Удаление успешно выполнено");
         } catch (Exception e) {
@@ -164,9 +182,8 @@ public class GitWriterController {
             @PathVariable String branch,
             @RequestBody GitRenameRequest request
     ) {
-        GitConnectionRequestDto repo = gitService.getByName(name);
-
         try {
+            GitConnectionRequestDto repo = gitService.getByName(name);
             gitWriterService.renamePath(repo, branch, request.getOldPath(), request.getNewPath(), request.getCommitMessage());
             return ResponseEntity.ok("Переименование успешно выполнено");
         } catch (Exception e) {
@@ -180,8 +197,8 @@ public class GitWriterController {
             @PathVariable String branch,
             @RequestBody GitRevertRequest request
     ) {
-        GitConnectionRequestDto repo = gitService.getByName(name);
         try {
+            GitConnectionRequestDto repo = gitService.getByName(name);
             gitWriterService.revertCommit(repo, branch, request.getCommitHash(), request.getCommitMessage());
             return ResponseEntity.ok("Коммит успешно отменён");
         } catch (Exception e) {

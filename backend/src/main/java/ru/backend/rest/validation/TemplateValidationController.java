@@ -23,11 +23,17 @@ public class TemplateValidationController {
     ) {
         try {
             ValidationResultDto result = validationService.validate(type, requests);
-            return result.isValid()
-                    ? ResponseEntity.ok(result)
-                    : ResponseEntity.badRequest().body(result);
-        } catch (Exception e) {
+            if (result.isValid()) {
+                return ResponseEntity.ok(result);
+            } else {
+                return ResponseEntity.badRequest().body(result);
+            }
+        } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(
+                    new ValidationResultDto(false, "Неверный тип валидации: " + e.getMessage())
+            );
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(
                     new ValidationResultDto(false, "Ошибка валидации: " + e.getMessage())
             );
         }

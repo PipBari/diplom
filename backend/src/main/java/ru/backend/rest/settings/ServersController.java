@@ -19,17 +19,25 @@ public class ServersController {
     }
 
     @GetMapping
-    public ResponseEntity<List<ServersDto>> getAll() {
-        return ResponseEntity.ok(serverService.getAll());
+    public ResponseEntity<?> getAll() {
+        try {
+            return ResponseEntity.ok(serverService.getAll());
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка получения списка серверов: " + e.getMessage());
+        }
     }
 
     @GetMapping("/{name}")
-    public ResponseEntity<ServersDto> getByName(@PathVariable String name) {
-        return serverService.getAll().stream()
-                .filter(s -> s.getName().equals(name))
-                .findFirst()
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<?> getByName(@PathVariable String name) {
+        try {
+            return serverService.getAll().stream()
+                    .filter(s -> s.getName().equals(name))
+                    .findFirst()
+                    .map(ResponseEntity::ok)
+                    .orElse(ResponseEntity.notFound().build());
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка при получении сервера: " + e.getMessage());
+        }
     }
 
     @PutMapping("/{name}")
@@ -39,34 +47,52 @@ public class ServersController {
             return ResponseEntity.ok("Сервер обновлён");
         } catch (NoSuchElementException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка при обновлении сервера: " + e.getMessage());
         }
     }
 
     @PostMapping("/{name}/status")
     public ResponseEntity<String> recheckStatus(@PathVariable String name) {
-        String updatedStatus = serverService.recheckStatus(name);
-        return ResponseEntity.ok("Статус обновлён: " + updatedStatus);
+        try {
+            String updatedStatus = serverService.recheckStatus(name);
+            return ResponseEntity.ok("Статус обновлён: " + updatedStatus);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка при обновлении статуса: " + e.getMessage());
+        }
     }
 
     @PostMapping
     public ResponseEntity<String> add(@RequestBody ServersDto server) {
-        serverService.save(server);
-        return ResponseEntity.ok("Сервер добавлен");
+        try {
+            serverService.save(server);
+            return ResponseEntity.ok("Сервер добавлен");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка при добавлении сервера: " + e.getMessage());
+        }
     }
 
     @PostMapping("/{name}/update-load")
-    public ResponseEntity<ServersDto> updateLoad(@PathVariable String name) {
-        serverService.updateServerLoad(name);
-        return serverService.getAll().stream()
-                .filter(s -> s.getName().equals(name))
-                .findFirst()
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<?> updateLoad(@PathVariable String name) {
+        try {
+            serverService.updateServerLoad(name);
+            return serverService.getAll().stream()
+                    .filter(s -> s.getName().equals(name))
+                    .findFirst()
+                    .map(ResponseEntity::ok)
+                    .orElse(ResponseEntity.notFound().build());
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка при обновлении загрузки сервера: " + e.getMessage());
+        }
     }
 
     @DeleteMapping("/{name}")
     public ResponseEntity<String> delete(@PathVariable String name) {
-        serverService.delete(name);
-        return ResponseEntity.ok("Сервер удалён");
+        try {
+            serverService.delete(name);
+            return ResponseEntity.ok("Сервер удалён");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка при удалении сервера: " + e.getMessage());
+        }
     }
 }
