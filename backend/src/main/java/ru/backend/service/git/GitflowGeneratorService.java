@@ -206,37 +206,68 @@ public class GitflowGeneratorService {
     private String generateDeployYml(ApplicationDto app, ServersDto server) {
         String remoteDir = "/home/" + server.getSpecify_username() + "/apps/" + app.getName();
         return """
-                name: Deploy %s
+            name: Deploy %s
 
-                on:
-                  push:
-                    branches:
-                      - %s
+            on:
+              push:
+                branches:
+                  - %s
+              workflow_dispatch:
+                inputs:
+                  rollback:
+                    description: 'Run rollback script instead of deploy'
+                    required: false
+                    default: 'false'
 
-                jobs:
-                  deploy:
-                    runs-on: ubuntu-22.04
-                    env:
-                      GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
-                      GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
-                      ANSIBLE_BECOME_PASS: ${{ secrets.SERVER_PASSWORD }}
-                    steps:
-                      - name: Checkout
-                        uses: actions/checkout@v3
+            jobs:
+              deploy:
+                if: ${{ github.event.inputs.rollback != 'true' }}
+                runs-on: ubuntu-22.04
+                env:
+                  GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
+                  GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+                  ANSIBLE_BECOME_PASS: ${{ secrets.SERVER_PASSWORD }}
+                steps:
+                  - name: Checkout
+                    uses: actions/checkout@v3
 
-                      - name: SSH Deploy
-                        uses: appleboy/ssh-action@master
-                        with:
-                          host: %s
-                          username: %s
-                          password: ${{ secrets.SERVER_PASSWORD }}
-                          envs: GIT_USERNAME,GIT_TOKEN,ANSIBLE_BECOME_PASS
-                          script: |
-                            cd %s
-                            bash ./deploy.sh
-                """.formatted(
+                  - name: SSH Deploy
+                    uses: appleboy/ssh-action@master
+                    with:
+                      host: %s
+                      username: %s
+                      password: ${{ secrets.SERVER_PASSWORD }}
+                      envs: GIT_USERNAME,GIT_TOKEN,ANSIBLE_BECOME_PASS
+                      script: |
+                        cd %s
+                        bash ./deploy.sh
+
+              rollback:
+                if: ${{ github.event.inputs.rollback == 'true' }}
+                runs-on: ubuntu-22.04
+                env:
+                  GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
+                  GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+                steps:
+                  - name: Checkout
+                    uses: actions/checkout@v3
+
+                  - name: SSH Rollback
+                    uses: appleboy/ssh-action@master
+                    with:
+                      host: %s
+                      username: %s
+                      password: ${{ secrets.SERVER_PASSWORD }}
+                      envs: GIT_USERNAME,GIT_TOKEN
+                      script: |
+                        cd %s
+                        bash ./rollback.sh
+            """.formatted(
                 app.getName(),
                 app.getBranch(),
+                server.getHost(),
+                server.getSpecify_username(),
+                remoteDir,
                 server.getHost(),
                 server.getSpecify_username(),
                 remoteDir
