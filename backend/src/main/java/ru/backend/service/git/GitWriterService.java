@@ -479,4 +479,33 @@ public class GitWriterService {
         }
         dir.delete();
     }
+
+    public void revertLastCommit(GitConnectionRequestDto repo, String branch) {
+        File tempDir = null;
+        try {
+            tempDir = Files.createTempDirectory("repo-revert-last").toFile();
+            try (Git git = Git.cloneRepository()
+                    .setURI(repo.getRepoUrl())
+                    .setBranch(branch)
+                    .setDirectory(tempDir)
+                    .setCredentialsProvider(getCredentials(repo))
+                    .call()) {
+
+                Iterable<RevCommit> commits = git.log().setMaxCount(1).call();
+                RevCommit lastCommit = commits.iterator().next();
+
+                git.revert()
+                        .include(lastCommit)
+                        .call();
+
+                git.push()
+                        .setCredentialsProvider(getCredentials(repo))
+                        .call();
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Ошибка при откате последнего коммита: " + e.getMessage(), e);
+        } finally {
+            if (tempDir != null) deleteDirectory(tempDir);
+        }
+    }
 }

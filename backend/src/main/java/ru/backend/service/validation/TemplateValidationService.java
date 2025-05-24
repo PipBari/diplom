@@ -82,8 +82,11 @@ public class TemplateValidationService {
 
                     log.info("[RESOURCE] Сервер {}: всего {} МБ, использовано системой {} МБ", serverName, totalRam, usedRam);
 
-                    Map<String, Integer> currentRes = extractVarsFromRequests(List.of(current));
-                    Map<String, Integer> othersRes = extractVarsFromRequests(others);
+                    List<String> currentConflicts = new ArrayList<>();
+                    List<String> othersConflicts = new ArrayList<>();
+
+                    Map<String, Integer> currentRes = extractVarsFromRequests(List.of(current), currentConflicts);
+                    Map<String, Integer> othersRes = extractVarsFromRequests(others, othersConflicts);
 
                     int currentRam = currentRes.getOrDefault("ram", 0);
                     int otherRam = othersRes.getOrDefault("ram", 0);
@@ -107,6 +110,14 @@ public class TemplateValidationService {
                         return new ValidationResultDto(false,
                                 "Недостаточно CPU: требуется %d vCPU (~%d%%), доступно ~%.1f%% (всего 100%%, уже занято ~%.1f%% другими файлами)"
                                         .formatted(currentCpu, currentCpu * 100, availableCpu, otherCpu * 100.0));
+                    }
+
+                    Set<String> allConflicts = new LinkedHashSet<>();
+                    allConflicts.addAll(currentConflicts);
+                    allConflicts.addAll(othersConflicts);
+                    if (!allConflicts.isEmpty()) {
+                        return new ValidationResultDto(true,
+                                "Terraform: OK, но найдены конфликты значений переменных: " + String.join(", ", allConflicts));
                     }
                 }
             }
@@ -141,10 +152,9 @@ public class TemplateValidationService {
         if (process.exitValue() != 0) throw new RuntimeException("Terraform " + args[0] + " ошибка: " + stderr + stdout);
     }
 
-    private Map<String, Integer> extractVarsFromRequests(List<ValidationRequestDto> requests) {
+    private Map<String, Integer> extractVarsFromRequests(List<ValidationRequestDto> requests, List<String> outConflicts) {
         Map<String, Integer> totals = new HashMap<>();
         Map<String, Set<Integer>> valuesByName = new HashMap<>();
-        List<String> conflicts = new ArrayList<>();
         Set<String> usedVars = new HashSet<>();
         ObjectMapper jsonMapper = new ObjectMapper();
 
@@ -176,8 +186,8 @@ public class TemplateValidationService {
                                 int value = def.asInt();
                                 log.info("[VAR(JSON)] {} = {}", name, value);
                                 valuesByName.computeIfAbsent(name, k -> new HashSet<>()).add(value);
-                                if (valuesByName.get(name).size() > 1 && !conflicts.contains(name)) {
-                                    conflicts.add(name);
+                                if (valuesByName.get(name).size() > 1 && !outConflicts.contains(name)) {
+                                    outConflicts.add(name);
                                     log.warn("[CONFLICT] {} имеет разные значения: {}", name, valuesByName.get(name));
                                 }
                                 if (name.contains("ram") || name.contains("mem")) {
@@ -198,8 +208,8 @@ public class TemplateValidationService {
                                 int value = val.asInt();
                                 log.info("[LOCAL(JSON)] {} = {}", name, value);
                                 valuesByName.computeIfAbsent(name, k -> new HashSet<>()).add(value);
-                                if (valuesByName.get(name).size() > 1 && !conflicts.contains(name)) {
-                                    conflicts.add(name);
+                                if (valuesByName.get(name).size() > 1 && !outConflicts.contains(name)) {
+                                    outConflicts.add(name);
                                     log.warn("[CONFLICT] {} имеет разные значения: {}", name, valuesByName.get(name));
                                 }
                                 if (name.contains("ram") || name.contains("mem")) {
@@ -277,8 +287,8 @@ public class TemplateValidationService {
                     int value = Integer.parseInt(varMatcher.group(2));
                     log.info("[VAR] {} = {}", name, value);
                     valuesByName.computeIfAbsent(name, k -> new HashSet<>()).add(value);
-                    if (valuesByName.get(name).size() > 1 && !conflicts.contains(name)) {
-                        conflicts.add(name);
+                    if (valuesByName.get(name).size() > 1 && !outConflicts.contains(name)) {
+                        outConflicts.add(name);
                         log.warn("[CONFLICT] {} имеет разные значения: {}", name, valuesByName.get(name));
                     }
                     if (name.contains("ram") || name.contains("mem")) {
@@ -294,8 +304,8 @@ public class TemplateValidationService {
                     int value = Integer.parseInt(localMatcher.group(2));
                     log.info("[LOCAL] {} = {}", name, value);
                     valuesByName.computeIfAbsent(name, k -> new HashSet<>()).add(value);
-                    if (valuesByName.get(name).size() > 1 && !conflicts.contains(name)) {
-                        conflicts.add(name);
+                    if (valuesByName.get(name).size() > 1 && !outConflicts.contains(name)) {
+                        outConflicts.add(name);
                         log.warn("[CONFLICT] {} имеет разные значения: {}", name, valuesByName.get(name));
                     }
                     if (name.contains("ram") || name.contains("mem")) {
@@ -308,10 +318,6 @@ public class TemplateValidationService {
             } catch (Exception e) {
                 log.warn("Ошибка парсинга файла {}: {}", request.getFilename(), e.getMessage());
             }
-        }
-
-        if (!conflicts.isEmpty()) {
-            log.warn("[VAR CONFLICTS DETECTED] {}", conflicts);
         }
 
         for (String used : usedVars) {

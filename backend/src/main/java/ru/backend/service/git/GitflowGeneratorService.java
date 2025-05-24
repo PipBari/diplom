@@ -38,6 +38,7 @@ public class GitflowGeneratorService {
 
         List<FileNodeDto> files = gitWriterService.listFiles(repo, branch, appPath);
         String deployScriptContent = generateDeploySh(app, server, files, repo);
+
         gitWriterService.pushFile(
                 repo,
                 branch,
@@ -57,7 +58,50 @@ public class GitflowGeneratorService {
                 "Добавлен GitHub Actions workflow"
         );
 
-        uploadDeployScriptToServer(remoteDir, server, deployScriptContent);
+        try {
+            uploadDeployScriptToServer(remoteDir, server, deployScriptContent);
+            runDeployScriptOverSsh(server, remoteDir);
+        } catch (Exception ex) {
+            gitWriterService.revertLastCommit(repo, branch);
+            throw new RuntimeException("Откат последнего коммита в Git из-за ошибки при деплое", ex);
+        }
+    }
+
+    private void runDeployScriptOverSsh(ServersDto server, String remoteDir) {
+        try {
+            JSch jsch = new JSch();
+            Session session = jsch.getSession(server.getSpecify_username(), server.getHost(), server.getPort());
+            session.setPassword(EncryptionUtils.decrypt(server.getPassword()));
+
+            Properties config = new Properties();
+            config.put("StrictHostKeyChecking", "no");
+            session.setConfig(config);
+            session.connect(10000);
+
+            String command = "cd " + remoteDir + " && bash ./deploy.sh";
+
+            ChannelExec channel = (ChannelExec) session.openChannel("exec");
+            channel.setCommand(command);
+            channel.setInputStream(null);
+            channel.setErrStream(System.err);
+            channel.setOutputStream(System.out);
+            channel.connect();
+
+            while (!channel.isClosed()) {
+                Thread.sleep(100);
+            }
+
+            int exitCode = channel.getExitStatus();
+            channel.disconnect();
+            session.disconnect();
+
+            if (exitCode != 0) {
+                throw new RuntimeException("deploy.sh завершился с ошибкой (exit code: " + exitCode + ")");
+            }
+
+        } catch (Exception e) {
+            throw new RuntimeException("Не удалось выполнить deploy.sh по SSH: " + e.getMessage(), e);
+        }
     }
 
     private String generateDeploySh(ApplicationDto app, ServersDto server, List<FileNodeDto> files, GitConnectionRequestDto repo) {
@@ -72,13 +116,10 @@ public class GitflowGeneratorService {
         StringBuilder sb = new StringBuilder();
         sb.append("#!/bin/bash\n");
         sb.append("set -e\n\n");
-
         sb.append("echo \"Начинается деплой %s...\"\n".formatted(app.getName()));
         sb.append("cd %s\n\n".formatted(appDir));
-
         sb.append("echo \"GIT_USERNAME: $GIT_USERNAME\"\n");
         sb.append("echo \"GIT_TOKEN длина: ${#GIT_TOKEN} символов\"\n\n");
-
         sb.append("if [ ! -d .git ]; then\n");
         sb.append("  echo 'Репозиторий не найден, клонируем...'\n");
         sb.append("  rm -rf .tmp_clone\n");
@@ -90,7 +131,6 @@ public class GitflowGeneratorService {
         sb.append("  echo 'Репозиторий уже существует, выполняем git pull'\n");
         sb.append("  git pull\n");
         sb.append("fi\n\n");
-
         sb.append("echo 'Текущий коммит:'\n");
         sb.append("git log -1 --oneline || true\n\n");
 
