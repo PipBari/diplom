@@ -5,7 +5,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.util.Base64;
 
 public class EncryptionUtils {
-    private static final String SECRET_KEY = System.getenv().getOrDefault("ENCRYPTION_KEY", "change_this_key!"); // 16 байт
+    private static final String SECRET_KEY = System.getenv().getOrDefault("ENCRYPTION_KEY", "change_this_key!");
 
     public static String encrypt(String value) {
         try {

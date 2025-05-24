@@ -22,6 +22,13 @@
         <strong>RAM:</strong> {{ formatRam(serverInfo.ram) }}
       </div>
 
+      <div v-if="serverInfo && workflowUrl && ciStatus" class="ci-status-inline">
+        <strong>CI/CD:</strong>
+        <a :href="workflowUrl" target="_blank">
+          <span :class="getCiStatusClass(ciStatus)">●</span> {{ ciStatus }}
+        </a>
+      </div>
+
       <div class="commit-header" v-if="commits.length > 0">
         <div class="commit-main-wrapper" @mouseenter="showCommitHistory = true" @mouseleave="showCommitHistory = false">
           💬 {{ commits[0].message }} — {{ commits[0].author }}, {{ formatDate(commits[0].date) }}
@@ -116,7 +123,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api/axios'
 import FileTreeNode from '@/components/FileTreeNode.vue'
@@ -142,6 +149,9 @@ const showRenameDialog = ref(false)
 const newFileName = ref('')
 const newFolderName = ref('')
 const renameNewName = ref('')
+
+const workflowUrl = ref(null)
+const ciStatus = ref(null)
 
 const contextMenu = ref({ visible: false, x: 0, y: 0, node: null })
 const showCommitHistory = ref(false)
@@ -170,41 +180,44 @@ const formatRam = (raw) => {
 }
 
 onMounted(async () => {
-  const appsRes = await api.get('/applications')
-  app.value = appsRes.data.find(a => a.name === route.params.name)
+  try {
+    const appsRes = await api.get('/applications')
+    app.value = appsRes.data.find(a => a.name === route.params.name)
+    if (!app.value) throw new Error('Приложение не найдено')
 
-  const serversRes = await api.get('/settings/servers')
-  server.value = serversRes.data.find(s => s.name === app.value.serverName)
+    const serversRes = await api.get('/settings/servers')
+    server.value = serversRes.data.find(s => s.name === app.value.serverName)
+    serverInfo.value = server.value
 
-  if (app.value?.serverName) {
-    serverInfo.value = serversRes.data.find(s => s.name === app.value.serverName)
+    if (app.value.serverName) {
+      setInterval(async () => {
+        try {
+          const updatedServers = await api.get('/settings/servers')
+          const updatedInfo = updatedServers.data.find(s => s.name === app.value.serverName)
+          if (updatedInfo) serverInfo.value = updatedInfo
+        } catch (err) {
+          console.error('Ошибка при автообновлении serverInfo:', err)
+        }
+      }, 60000)
+    }
 
-    setInterval(async () => {
-      try {
-        const updatedServers = await api.get('/settings/servers')
-        const updatedInfo = updatedServers.data.find(s => s.name === app.value.serverName)
-        if (updatedInfo) serverInfo.value = updatedInfo
-      } catch (err) {
-        console.error('Ошибка при автообновлении serverInfo:', err)
-      }
-    }, 60000)
+    const reposRes = await api.get('/settings/git')
+    repo.value = reposRes.data.find(r => r.name === app.value.repoName)
+    if (!repo.value) throw new Error('Репозиторий не найден')
+
+    await refreshTree()
+    await pollCiStatus()
+
+    document.addEventListener('click', () => (contextMenu.value.visible = false))
+  } catch (err) {
+    console.error('Ошибка при инициализации редактора:', err.message)
+    addToast('Ошибка при загрузке приложения или сервера', 'error')
   }
-
-  const reposRes = await api.get('/settings/git')
-  repo.value = reposRes.data.find(r => r.name === app.value.repoName)
-
-  await refreshTree()
-
-  document.addEventListener('click', () => (contextMenu.value.visible = false))
 })
 
-const formatDate = (raw) => {
-  const normalized = raw.replace('MSK', '+03:00')
-  return new Date(normalized).toLocaleString('ru-RU', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  })
-}
+onUnmounted(() => {
+  if (pollTimeout) clearTimeout(pollTimeout)
+})
 
 const generateGitflow = async () => {
   try {
@@ -593,6 +606,44 @@ const findNodeByPath = (entry, targetPath) => {
   }
 
   return null
+}
+
+let pollTimeout = null
+
+const pollCiStatus = async () => {
+  try {
+    const ciRes = await api.get(`/applications/${app.value.name}/gitflow`, {
+      headers: { 'Cache-Control': 'no-cache' }
+    })
+
+    const newStatus = ciRes.data.status
+    workflowUrl.value = ciRes.data.workflowUrl
+
+    if (ciStatus.value !== newStatus) {
+      ciStatus.value = ''
+      await nextTick()
+      ciStatus.value = newStatus
+    }
+
+    const delay = ['in_progress', 'queued'].includes(newStatus) ? 10000 : 30000
+    pollTimeout = setTimeout(pollCiStatus, delay)
+
+  } catch (e) {
+    console.warn('Ошибка при обновлении CI/CD:', e.response?.data || e.message)
+    workflowUrl.value = null
+    ciStatus.value = null
+    pollTimeout = setTimeout(pollCiStatus, 30000)
+  }
+}
+
+const getCiStatusClass = (status) => {
+  return {
+    success: 'status-success',
+    failed: 'status-failed',
+    running: 'status-running',
+    generated: 'status-neutral',
+    not_tracked: 'status-unknown'
+  }[status] || 'status-unknown'
 }
 
 const onRootDrop = async (e) => {
