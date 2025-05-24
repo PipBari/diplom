@@ -88,6 +88,7 @@
             v-if="currentFileContent !== null"
             v-model:value="currentFileContent"
             :language="getLanguageForFile(currentFileName)"
+            :key="currentFileName + ':' + currentFileContent?.length"
             theme="vs"
             class="editor-textarea"
         />
@@ -412,12 +413,15 @@ const deleteBranch = async () => {
 
 const loadEntry = async (path) => {
   if (!path || path.endsWith('/')) return
+
   try {
+    currentFileContent.value = null
+    currentFileName.value = path
     const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/file`, {
       params: { path }
     })
+    await nextTick()
     currentFileContent.value = res.data
-    currentFileName.value = path
     await loadCommits(path)
   } catch (e) {
     addToast('Ошибка при загрузке файла', 'error')
@@ -911,5 +915,10 @@ const filteredRoot = computed(() => {
   if (!query) return rootEntry.value
   return filterTree(rootEntry.value, query)
 })
+
+const formatDate = (dateStr) => {
+  const d = new Date(dateStr)
+  return d.toLocaleString('ru-RU')
+}
 
 </script>
