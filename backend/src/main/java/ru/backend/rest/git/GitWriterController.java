@@ -97,53 +97,32 @@ public class GitWriterController {
         }
     }
 
-    @GetMapping("/repo/branches")
-    public ResponseEntity<List<String>> listBranches(@RequestParam String url, @RequestParam String username, @RequestParam String token) {
+    @GetMapping("/branches")
+    public ResponseEntity<List<String>> listBranches(GitConnectionRequestDto dto) {
         try {
-            GitConnectionRequestDto dto = new GitConnectionRequestDto();
-            dto.setRepoUrl(url);
-            dto.setUsername(username);
-            dto.setToken(token);
             return ResponseEntity.ok(gitWriterService.listBranches(dto));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(List.of("Ошибка: " + e.getMessage()));
         }
     }
 
-    @PostMapping("/repo/branch")
+    @PostMapping("/branch")
     public ResponseEntity<String> createBranch(
-            @RequestParam String url,
-            @RequestParam String username,
-            @RequestParam String token,
-            @RequestParam String name,
-            @RequestParam String from
+            @RequestBody GitBranchCreateRequest request
     ) {
         try {
-            GitConnectionRequestDto dto = new GitConnectionRequestDto();
-            dto.setRepoUrl(url);
-            dto.setUsername(username);
-            dto.setToken(token);
-            gitWriterService.createBranch(dto, name, from);
-            return ResponseEntity.ok("Ветка создана: " + name);
+            gitWriterService.createBranch(request.toConnectionDto(), request.getName(), request.getFrom());
+            return ResponseEntity.ok("Ветка создана: " + request.getName());
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Ошибка при создании ветки: " + e.getMessage());
         }
     }
 
-    @DeleteMapping("/repo/branch")
-    public ResponseEntity<String> deleteBranch(
-            @RequestParam String url,
-            @RequestParam String username,
-            @RequestParam String token,
-            @RequestParam String branch
-    ) {
+    @DeleteMapping("/branch")
+    public ResponseEntity<String> deleteBranch(@RequestBody GitBranchDeleteRequest request) {
         try {
-            GitConnectionRequestDto dto = new GitConnectionRequestDto();
-            dto.setRepoUrl(url);
-            dto.setUsername(username);
-            dto.setToken(token);
-            gitWriterService.deleteBranch(dto, branch);
-            return ResponseEntity.ok("Ветка удалена: " + branch);
+            gitWriterService.deleteBranch(request.toConnectionDto(), request.getBranch());
+            return ResponseEntity.ok("Ветка удалена: " + request.getBranch());
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Ошибка при удалении ветки: " + e.getMessage());
         }

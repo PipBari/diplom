@@ -356,11 +356,18 @@ const deleteBranch = async () => {
         branch: currentBranch.value
       }
     })
+
     addToast(`Ветка "${currentBranch.value}" удалена`, 'success')
+
     await fetchBranches()
+
     currentBranch.value = availableBranches.value[0] || ''
     app.value.branch = currentBranch.value
-    await refreshTree()
+
+    if (currentBranch.value) {
+      await refreshTree()
+    }
+
   } catch (e) {
     addToast(e.response?.data || 'Ошибка при удалении ветки', 'error')
   }
