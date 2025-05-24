@@ -261,48 +261,6 @@ public class GitflowGeneratorService {
         return sb.toString();
     }
 
-    private void uploadDeployScriptToServer(String remoteDir, ServersDto server, String scriptContent) {
-        try {
-            JSch jsch = new JSch();
-            Session session = jsch.getSession(server.getSpecify_username(), server.getHost(), server.getPort());
-            session.setPassword(EncryptionUtils.decrypt(server.getPassword()));
-
-            Properties config = new Properties();
-            config.put("StrictHostKeyChecking", "no");
-            session.setConfig(config);
-            session.connect(10000);
-
-            executeCommand(session, "mkdir -p " + remoteDir);
-
-            String remoteScriptPath = remoteDir + "/deploy.sh";
-            String command = "cat > " + remoteScriptPath + " && chmod +x " + remoteScriptPath;
-
-            ChannelExec channel = (ChannelExec) session.openChannel("exec");
-            channel.setCommand(command);
-            channel.setInputStream(null);
-            channel.setErrStream(System.err);
-            OutputStream out = channel.getOutputStream();
-            channel.connect();
-
-            out.write(scriptContent.getBytes(StandardCharsets.UTF_8));
-            out.flush();
-            out.close();
-
-            while (!channel.isClosed()) {
-                Thread.sleep(100);
-            }
-
-            if (channel.getExitStatus() != 0) {
-                throw new RuntimeException("Ошибка выполнения команды для deploy.sh");
-            }
-
-            channel.disconnect();
-            session.disconnect();
-        } catch (Exception e) {
-            throw new RuntimeException("Ошибка при отправке deploy.sh на сервер: " + e.getMessage(), e);
-        }
-    }
-
     private void executeCommand(Session session, String command) throws Exception {
         ChannelExec channel = (ChannelExec) session.openChannel("exec");
         channel.setCommand(command);
