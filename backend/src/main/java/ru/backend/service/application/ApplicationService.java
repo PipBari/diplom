@@ -131,4 +131,26 @@ public class ApplicationService {
             return "Error";
         }
     }
+
+    public void update(String name, ApplicationDto update) {
+        ApplicationDto existing = applicationStorage.get(name);
+        if (existing == null) {
+            throw new NoSuchElementException("Application not found: " + name);
+        }
+
+        if (isNotBlank(update.getRepoName())) existing.setRepoName(update.getRepoName());
+        if (isNotBlank(update.getBranch())) existing.setBranch(update.getBranch());
+        if (isNotBlank(update.getPath())) existing.setPath(update.getPath());
+        if (isNotBlank(update.getProjectName())) existing.setProjectName(update.getProjectName());
+        if (isNotBlank(update.getServerName())) existing.setServerName(update.getServerName());
+        if (isNotBlank(update.getSyncStrategy())) existing.setSyncStrategy(update.getSyncStrategy());
+        if (isNotBlank(update.getStatus())) existing.setStatus(update.getStatus());
+
+        applicationStorage.put(name, existing);
+        saveToDisk();
+    }
+
+    private boolean isNotBlank(String value) {
+        return value != null && !value.isBlank();
+    }
 }

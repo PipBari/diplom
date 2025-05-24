@@ -5,8 +5,9 @@
       <div class="dropdown" @click.stop>
         <button class="menu-btn" @click.stop="toggleMenu">⋮</button>
         <div v-if="menuOpen" class="menu">
-          <div class="menu-item" @click="$emit('sync', app.name)">Синхронизировать</div>
-          <div class="menu-item" @click="$emit('delete', app.name)">Удалить</div>
+          <div class="menu-item" @click.stop="$emit('sync', app.name)">Синхронизировать</div>
+          <div class="menu-item" @click.stop="$emit('edit', app)">Редактировать</div>
+          <div class="menu-item" @click.stop="$emit('delete', app.name)">Удалить</div>
         </div>
       </div>
     </div>
@@ -14,17 +15,15 @@
       <p><b>Проект:</b> {{ app.projectName || '—' }}</p>
       <p><b>Состояние:</b>
         <span :class="['status', statusClass]">
-      {{ statusText }}
-</span>
+          {{ statusText }}
+        </span>
       </p>
-
       <p class="truncate-url">
         <b>Репозиторий:</b>
         <a :href="getRepoUrl(app.repoName)" target="_blank" @click.stop>
           {{ getRepoUrl(app.repoName) }}
         </a>
       </p>
-
       <p><b>Ветка:</b> {{ app.branch || '—' }}</p>
       <p><b>Путь:</b> {{ app.path || '—' }}</p>
       <p><b>Сервер:</b> {{ app.serverName || '—' }}</p>
@@ -40,13 +39,15 @@ import { useRouter } from 'vue-router'
 import api from '@/api/axios'
 
 const props = defineProps({ app: Object })
-const emit = defineEmits(['sync', 'delete'])
+const emit = defineEmits(['sync', 'delete', 'edit'])
 
 const router = useRouter()
 const menuOpen = ref(false)
 const repos = ref([])
 
-const toggleMenu = () => menuOpen.value = !menuOpen.value
+const toggleMenu = () => {
+  menuOpen.value = !menuOpen.value
+}
 
 const goToDetails = () => {
   router.push(`/applications/${props.app.name}`)
@@ -54,11 +55,16 @@ const goToDetails = () => {
 
 const statusText = computed(() => {
   switch (props.app.status) {
-    case 'Synced': return 'Синхронизировано'
-    case 'Out of Sync': return 'Есть изменения'
-    case 'Error': return 'Ошибка'
-    case 'Not Synced': return 'Не синхронизировано'
-    default: return props.app.status
+    case 'Synced':
+      return 'Синхронизировано'
+    case 'Out of Sync':
+      return 'Есть изменения'
+    case 'Error':
+      return 'Ошибка'
+    case 'Not Synced':
+      return 'Не синхронизировано'
+    default:
+      return props.app.status
   }
 })
 
@@ -146,6 +152,10 @@ window.addEventListener('click', (e) => {
   background: #e2e3e5;
   color: grey;
 }
+.status.warn {
+  background: #fff3cd;
+  color: #856404;
+}
 .dropdown {
   position: relative;
 }
@@ -171,10 +181,5 @@ window.addEventListener('click', (e) => {
 }
 .menu-item:hover {
   background: #f0f0f0;
-}
-
-.status.warn {
-  background: #fff3cd;
-  color: #856404;
 }
 </style>

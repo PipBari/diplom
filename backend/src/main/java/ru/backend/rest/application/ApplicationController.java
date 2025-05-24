@@ -66,4 +66,16 @@ public class ApplicationController {
             return ResponseEntity.status(500).body("Ошибка сервера при обновлении статуса: " + e.getMessage());
         }
     }
+
+    @PutMapping("/{name}")
+    public ResponseEntity<?> update(@PathVariable String name, @RequestBody ApplicationDto request) {
+        try {
+            applicationService.update(name, request);
+            return ResponseEntity.ok("Приложение обновлено");
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body("Приложение не найдено: " + name);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка при обновлении: " + e.getMessage());
+        }
+    }
 }

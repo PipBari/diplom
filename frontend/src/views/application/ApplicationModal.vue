@@ -2,13 +2,13 @@
   <div class="overlay">
     <div class="side-panel">
       <div class="side-panel-header">
-        <span>Создать приложение</span>
+        <span>{{ isEdit ? 'Редактировать приложение' : 'Создать приложение' }}</span>
         <button class="close-btn" @click="$emit('close')">×</button>
       </div>
       <div class="side-panel-content">
         <form @submit.prevent="submitApp">
           <label>Имя:</label>
-          <input v-model="app.name" required />
+          <input v-model="app.name" :readonly="isEdit" required />
 
           <label>Репозиторий:</label>
           <select v-model="app.repoName" required>
@@ -47,7 +47,7 @@
           </select>
 
           <div class="form-actions">
-            <button type="submit">Создать</button>
+            <button type="submit">{{ isEdit ? 'Сохранить' : 'Создать' }}</button>
             <button type="button" @click="$emit('close')">Отмена</button>
           </div>
         </form>
@@ -57,10 +57,16 @@
 </template>
 
 <script setup>
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, computed } from 'vue'
 import api from '@/api/axios'
 
 const emit = defineEmits(['submit', 'close'])
+
+const props = defineProps({
+  initialData: Object
+})
+
+const isEdit = computed(() => !!props.initialData)
 
 const app = reactive({
   name: '',
@@ -72,10 +78,6 @@ const app = reactive({
   syncStrategy: 'manual'
 })
 
-const repos = ref([])
-const projects = ref([])
-const servers = ref([])
-
 onMounted(async () => {
   const [r, p, s] = await Promise.all([
     api.get('/settings/git'),
@@ -85,7 +87,15 @@ onMounted(async () => {
   repos.value = r.data
   projects.value = p.data
   servers.value = s.data
+
+  if (props.initialData) {
+    Object.assign(app, props.initialData)
+  }
 })
+
+const repos = ref([])
+const projects = ref([])
+const servers = ref([])
 
 const validateBeforeSubmit = async () => {
   const { repoName, branch, path } = app
@@ -115,7 +125,23 @@ const validateBeforeSubmit = async () => {
 
 const submitApp = async () => {
   if (!(await validateBeforeSubmit())) return
-  emit('submit', { ...app, createdAt: new Date().toISOString() })
+
+  const payload = {
+    ...app,
+    createdAt: props.initialData?.createdAt || new Date().toISOString()
+  }
+
+  try {
+    if (isEdit.value) {
+      await api.put(`/applications/${app.name}`, payload)
+    } else {
+      await api.post('/applications', payload)
+    }
+
+    emit('submit', payload)
+  } catch (e) {
+    alert('Ошибка при сохранении')
+  }
 }
 </script>
 

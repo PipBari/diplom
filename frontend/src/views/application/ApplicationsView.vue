@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="top-bar">
-      <button @click="showModal = true">+ Новое приложение</button>
+      <button @click="startAdd">+ Новое приложение</button>
     </div>
 
     <div v-if="applications.length === 0" class="empty">Нет приложений</div>
@@ -13,13 +13,15 @@
           :app="app"
           @sync="syncApp"
           @delete="deleteApp"
+          @edit="editApp"
       />
     </div>
 
     <ApplicationModal
         v-if="showModal"
-        @submit="addApp"
-        @close="showModal = false"
+        :initial-data="editingApp"
+        @submit="saveApp"
+        @close="closeModal"
     />
   </div>
 </template>
@@ -34,6 +36,7 @@ import { Client } from '@stomp/stompjs'
 
 const applications = ref([])
 const showModal = ref(false)
+const editingApp = ref(null)
 let stompClient = null
 
 const loadApps = async () => {
@@ -66,10 +69,24 @@ onMounted(async () => {
   connectWebSocket()
 })
 
-const addApp = async (app) => {
-  await api.post('/applications', app)
+const startAdd = () => {
+  editingApp.value = null
+  showModal.value = true
+}
+
+const editApp = (app) => {
+  editingApp.value = { ...app }
+  showModal.value = true
+}
+
+const saveApp = async (app) => {
+  if (editingApp.value) {
+    await api.put(`/applications/${app.name}`, app)
+  } else {
+    await api.post('/applications', app)
+  }
   await loadApps()
-  showModal.value = false
+  closeModal()
 }
 
 const syncApp = async (name) => {
@@ -79,6 +96,11 @@ const syncApp = async (name) => {
 const deleteApp = async (name) => {
   await api.delete(`/applications/${name}`)
   await loadApps()
+}
+
+const closeModal = () => {
+  showModal.value = false
+  editingApp.value = null
 }
 </script>
 
