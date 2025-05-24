@@ -24,47 +24,51 @@ public class GitController {
             List<GitConnectionRequestDto> repos = gitService.getAll();
             return ResponseEntity.ok(repos);
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Ошибка получения списка репозиториев: " + e.getMessage());
+            return ResponseEntity.status(500).body("Ошибка при получении списка репозиториев: " + e.getMessage());
         }
     }
 
     @PostMapping
-    public ResponseEntity<String> add(@RequestBody GitConnectionRequestDto request) {
+    public ResponseEntity<?> add(@RequestBody GitConnectionRequestDto request) {
         try {
             gitService.save(request);
-            return ResponseEntity.ok("Репозиторий добавлен");
+            return ResponseEntity.status(201).body("Репозиторий успешно добавлен");
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Ошибка при добавлении репозитория: " + e.getMessage());
         }
     }
 
     @DeleteMapping("/{name}")
-    public ResponseEntity<String> delete(@PathVariable String name) {
+    public ResponseEntity<?> delete(@PathVariable String name) {
         try {
             gitService.delete(name);
-            return ResponseEntity.ok("Репозиторий удалён");
+            return ResponseEntity.ok("Репозиторий успешно удалён");
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body("Репозиторий не найден: " + e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Ошибка при удалении репозитория: " + e.getMessage());
         }
     }
 
     @PostMapping("/{name}/status")
-    public ResponseEntity<String> recheckStatus(@PathVariable String name) {
+    public ResponseEntity<?> recheckStatus(@PathVariable String name) {
         try {
             String updatedStatus = gitService.recheckStatus(name);
             return ResponseEntity.ok("Статус обновлён: " + updatedStatus);
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body("Репозиторий не найден: " + e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Ошибка при проверке статуса: " + e.getMessage());
         }
     }
 
     @PutMapping("/{name}")
-    public ResponseEntity<String> update(@PathVariable String name, @RequestBody GitConnectionRequestDto request) {
+    public ResponseEntity<?> update(@PathVariable String name, @RequestBody GitConnectionRequestDto request) {
         try {
             gitService.update(name, request);
-            return ResponseEntity.ok("Репозиторий обновлён");
+            return ResponseEntity.ok("Репозиторий успешно обновлён");
         } catch (NoSuchElementException e) {
-            return ResponseEntity.badRequest().body("Репозиторий не найден: " + e.getMessage());
+            return ResponseEntity.status(404).body("Репозиторий не найден: " + e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Ошибка при обновлении репозитория: " + e.getMessage());
         }

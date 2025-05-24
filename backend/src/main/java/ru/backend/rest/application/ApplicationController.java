@@ -6,6 +6,7 @@ import ru.backend.rest.application.dto.ApplicationDto;
 import ru.backend.service.application.ApplicationService;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 
 @RestController
 @RequestMapping("/applications")
@@ -23,37 +24,46 @@ public class ApplicationController {
             List<ApplicationDto> result = applicationService.getAll();
             return ResponseEntity.ok(result);
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Ошибка получения приложений: " + e.getMessage());
+            return ResponseEntity.status(500).body("Ошибка сервера при получении приложений: " + e.getMessage());
         }
     }
 
     @PostMapping
-    public ResponseEntity<String> add(@RequestBody ApplicationDto request) {
+    public ResponseEntity<?> add(@RequestBody ApplicationDto request) {
         try {
+            if (request.getName() == null || request.getName().isBlank()) {
+                return ResponseEntity.badRequest().body("Имя приложения не может быть пустым");
+            }
             applicationService.save(request);
-            return ResponseEntity.ok("Приложение добавлено");
+            return ResponseEntity.status(201).body("Приложение успешно добавлено");
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body("Неверные данные: " + e.getMessage());
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Ошибка при добавлении: " + e.getMessage());
+            return ResponseEntity.status(500).body("Ошибка сервера при добавлении: " + e.getMessage());
         }
     }
 
     @DeleteMapping("/{name}")
-    public ResponseEntity<String> delete(@PathVariable String name) {
+    public ResponseEntity<?> delete(@PathVariable String name) {
         try {
             applicationService.delete(name);
             return ResponseEntity.ok("Приложение удалено");
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body("Приложение не найдено: " + name);
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Ошибка при удалении: " + e.getMessage());
+            return ResponseEntity.status(500).body("Ошибка сервера при удалении: " + e.getMessage());
         }
     }
 
     @PostMapping("/{name}/status")
-    public ResponseEntity<String> recheckStatus(@PathVariable String name) {
+    public ResponseEntity<?> recheckStatus(@PathVariable String name) {
         try {
             String status = applicationService.recheckStatus(name);
             return ResponseEntity.ok("Статус обновлён: " + status);
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body("Приложение не найдено: " + name);
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Ошибка обновления статуса: " + e.getMessage());
+            return ResponseEntity.status(500).body("Ошибка сервера при обновлении статуса: " + e.getMessage());
         }
     }
 }

@@ -6,6 +6,7 @@ import ru.backend.rest.settings.dto.ProjectDto;
 import ru.backend.service.settings.ProjectService;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 
 @RestController
 @RequestMapping("/settings/projects")
@@ -31,7 +32,9 @@ public class ProjectsController {
     public ResponseEntity<String> add(@RequestBody ProjectDto project) {
         try {
             projectService.save(project);
-            return ResponseEntity.ok("Проект добавлен");
+            return ResponseEntity.status(201).body("Проект добавлен");
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body("Ошибка в аргументах: " + e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Ошибка при добавлении проекта: " + e.getMessage());
         }
@@ -42,6 +45,8 @@ public class ProjectsController {
         try {
             projectService.delete(name);
             return ResponseEntity.ok("Проект удалён");
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body("Проект не найден: " + e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Ошибка при удалении проекта: " + e.getMessage());
         }
@@ -52,6 +57,8 @@ public class ProjectsController {
         try {
             projectService.update(name, project);
             return ResponseEntity.ok("Проект обновлён");
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body("Проект не найден: " + e.getMessage());
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body("Ошибка в аргументах: " + e.getMessage());
         } catch (Exception e) {

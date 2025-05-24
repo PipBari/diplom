@@ -7,6 +7,7 @@ import ru.backend.service.settings.ServersService;
 
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/settings/servers")
@@ -30,11 +31,11 @@ public class ServersController {
     @GetMapping("/{name}")
     public ResponseEntity<?> getByName(@PathVariable String name) {
         try {
-            return serverService.getAll().stream()
+            Optional<ServersDto> result = serverService.getAll().stream()
                     .filter(s -> s.getName().equals(name))
-                    .findFirst()
-                    .map(ResponseEntity::ok)
-                    .orElse(ResponseEntity.notFound().build());
+                    .findFirst();
+            return result.<ResponseEntity<?>>map(ResponseEntity::ok)
+                    .orElseGet(() -> ResponseEntity.status(404).body("Сервер не найден: " + name));
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Ошибка при получении сервера: " + e.getMessage());
         }
@@ -46,7 +47,9 @@ public class ServersController {
             serverService.update(name, updated);
             return ResponseEntity.ok("Сервер обновлён");
         } catch (NoSuchElementException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.status(404).body("Сервер не найден: " + e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body("Ошибка в аргументах: " + e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Ошибка при обновлении сервера: " + e.getMessage());
         }
@@ -57,6 +60,8 @@ public class ServersController {
         try {
             String updatedStatus = serverService.recheckStatus(name);
             return ResponseEntity.ok("Статус обновлён: " + updatedStatus);
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body("Сервер не найден: " + e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Ошибка при обновлении статуса: " + e.getMessage());
         }
@@ -66,7 +71,9 @@ public class ServersController {
     public ResponseEntity<String> add(@RequestBody ServersDto server) {
         try {
             serverService.save(server);
-            return ResponseEntity.ok("Сервер добавлен");
+            return ResponseEntity.status(201).body("Сервер добавлен");
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body("Ошибка в аргументах: " + e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Ошибка при добавлении сервера: " + e.getMessage());
         }
@@ -76,11 +83,11 @@ public class ServersController {
     public ResponseEntity<?> updateLoad(@PathVariable String name) {
         try {
             serverService.updateServerLoad(name);
-            return serverService.getAll().stream()
+            Optional<ServersDto> updated = serverService.getAll().stream()
                     .filter(s -> s.getName().equals(name))
-                    .findFirst()
-                    .map(ResponseEntity::ok)
-                    .orElse(ResponseEntity.notFound().build());
+                    .findFirst();
+            return updated.<ResponseEntity<?>>map(ResponseEntity::ok)
+                    .orElseGet(() -> ResponseEntity.status(404).body("Сервер не найден: " + name));
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Ошибка при обновлении загрузки сервера: " + e.getMessage());
         }
@@ -91,6 +98,8 @@ public class ServersController {
         try {
             serverService.delete(name);
             return ResponseEntity.ok("Сервер удалён");
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body("Сервер не найден: " + e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Ошибка при удалении сервера: " + e.getMessage());
         }

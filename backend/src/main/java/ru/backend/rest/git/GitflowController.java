@@ -4,15 +4,10 @@ import lombok.RequiredArgsConstructor;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import ru.backend.rest.application.dto.ApplicationDto;
-import ru.backend.service.application.ApplicationService;
-import ru.backend.service.git.GitService;
 import ru.backend.service.git.GitflowGeneratorService;
-import ru.backend.service.settings.ServersService;
-import ru.backend.rest.git.dto.GitConnectionRequestDto;
-import ru.backend.rest.settings.dto.ServersDto;
 
 import java.io.IOException;
+import java.util.NoSuchElementException;
 
 @RestController
 @RequestMapping("/applications/{name}/gitflow")
@@ -22,14 +17,16 @@ public class GitflowController {
     private final GitflowGeneratorService gitflowGeneratorService;
 
     @PostMapping
-    public ResponseEntity<String> generateGitflow(@PathVariable String name) {
+    public ResponseEntity<?> generateGitflow(@PathVariable String name) {
         try {
             gitflowGeneratorService.generateGitflow(name);
-            return ResponseEntity.ok("Gitflow успешно сгенерирован и отправлен в репозиторий");
+            return ResponseEntity.status(201).body("Gitflow успешно сгенерирован и отправлен в репозиторий");
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body("Приложение не найдено: " + e.getMessage());
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body("Ошибка в параметрах: " + e.getMessage());
         } catch (IOException | GitAPIException e) {
-            return ResponseEntity.status(500).body("Ошибка при генерации gitflow: " + e.getMessage());
+            return ResponseEntity.status(500).body("Ошибка при генерации Gitflow: " + e.getMessage());
         }
     }
 }
