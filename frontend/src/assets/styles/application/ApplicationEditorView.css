@@ -370,4 +370,22 @@
     background: #eaeaea;
 }
 
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+}
 
+.pagination button {
+    padding: 5px 10px;
+    border: none;
+    background: #ececec;
+    cursor: pointer;
+}
+
+.pagination button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

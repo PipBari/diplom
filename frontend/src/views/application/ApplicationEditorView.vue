@@ -1,6 +1,13 @@
 <template>
   <div class="editor-layout">
-    <div class="file-tree" @contextmenu.prevent="showContextMenu($event, null)" @dragover.prevent="onRootDragOver" @dragleave="onRootDragLeave" @drop="onRootDrop" :class="{ 'drag-over': isRootDragOver }">
+    <div
+        class="file-tree"
+        @contextmenu.prevent="showContextMenu($event, null)"
+        @dragover.prevent="onRootDragOver"
+        @dragleave="onRootDragLeave"
+        @drop="onRootDrop"
+        :class="{ 'drag-over': isRootDragOver }"
+    >
       <div class="file-search">
         <input
             v-model="searchQuery"
@@ -38,7 +45,8 @@
       <div v-if="serverInfo" class="server-status-inline">
         <strong>Сервер:</strong> {{ serverInfo.name }} —
         <strong>Статус:</strong>
-        <span :class="getStatusClass(serverInfo.status)">●</span> {{ serverInfo.status }} —
+        <span :class="getStatusClass(serverInfo.status)">●</span>
+        {{ serverInfo.status }} —
         <strong>CPU:</strong> {{ serverInfo.cpu || '—' }} —
         <strong>RAM:</strong> {{ formatRam(serverInfo.ram) }}
 
@@ -53,27 +61,24 @@
       <div class="branch-selector">
         <label>Ветка: </label>
         <select v-model="currentBranch" @change="switchBranch">
-          <option v-for="b in availableBranches" :key="b" :value="b">{{ b }}</option>
+          <option v-for="b in availableBranches" :key="b" :value="b">
+            {{ b }}
+          </option>
         </select>
         <button @click="showCreateBranchDialog = true">+ Ветка</button>
-        <button @click="deleteBranch" :disabled="!currentBranch || currentBranch === 'main'">🗑 Удалить</button>
+        <button
+            @click="deleteBranch"
+            :disabled="!currentBranch || currentBranch === 'main'"
+        >
+          🗑 Удалить
+        </button>
       </div>
 
       <div class="commit-header" v-if="commits.length > 0">
-        <div class="commit-main-wrapper" @mouseenter="showCommitHistory = true" @mouseleave="showCommitHistory = false">
-          💬 {{ commits[0].message }} — {{ commits[0].author }}, {{ formatDate(commits[0].date) }}
-          <div class="commit-popup" v-if="showCommitHistory">
-            <ul>
-              <li v-for="c in commits" :key="c.hash">
-                <div class="commit-item">
-                  <div class="commit-text">
-                    <b>{{ formatDate(c.date) }}</b> — {{ c.author }}: {{ c.message }}
-                  </div>
-                  <button class="revert-button" @click.stop="revertCommit(c)">↩️</button>
-                </div>
-              </li>
-            </ul>
-          </div>
+        <div class="commit-main-wrapper">
+          💬 {{ commits[0].message }} — {{ commits[0].author }},
+          {{ formatDate(commits[0].date) }}
+          <button @click="showRevertModal = true">↩️ Откатить</button>
         </div>
       </div>
 
@@ -83,7 +88,7 @@
         <button v-if="serverInfo" @click="generateGitflow">Workflows</button>
       </div>
 
-      <div style="width: 100%; height: 100%; min-width: 0;">
+      <div style="width: 100%; height: 100%; min-width: 0">
         <MonacoEditor
             v-if="currentFileContent !== null"
             :value="currentFileContent"
@@ -97,15 +102,49 @@
       </div>
     </div>
 
-    <div v-if="contextMenu.visible"
-         class="context-menu"
-         :style="{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }">
+    <div v-if="showRevertModal" class="overlay" @click.self="showRevertModal = false">
+      <div class="dialog revert-dialog">
+        <h3>Откат к коммиту</h3>
+        <input type="date" v-model="revertDateFilter" class="date-input" />
+
+        <ul class="commit-list">
+          <li v-for="c in paginatedCommits" :key="c.hash">
+            <div class="commit-item">
+              <div class="commit-text">
+                <b>{{ formatDate(c.date) }}</b> — {{ c.author }}: {{ c.message }}
+              </div>
+              <button class="revert-button" @click="confirmRevert(c)">↩️</button>
+            </div>
+          </li>
+        </ul>
+
+        <div class="pagination">
+          <button @click="prevPage" :disabled="currentPage === 1">← Назад</button>
+          <span>Страница {{ currentPage }} / {{ totalPages }}</span>
+          <button @click="nextPage" :disabled="currentPage === totalPages">Вперёд →</button>
+        </div>
+
+        <div class="dialog-actions">
+          <button @click="showRevertModal = false">Закрыть</button>
+        </div>
+      </div>
+    </div>
+
+    <div
+        v-if="contextMenu.visible"
+        class="context-menu"
+        :style="{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }"
+    >
       <div class="context-item" @click="openNewFileDialog">📄 Новый файл</div>
       <div class="context-item" @click="openNewFolderDialog">📁 Новая папка</div>
-      <div v-if="contextMenu.node" class="context-item" @click="openRenameDialog">✏️ Переименовать</div>
-      <div v-if="contextMenu.node && canDelete(contextMenu.node.name)"
-           class="context-item danger"
-           @click="deletePath">
+      <div v-if="contextMenu.node" class="context-item" @click="openRenameDialog">
+        ✏️ Переименовать
+      </div>
+      <div
+          v-if="contextMenu.node && canDelete(contextMenu.node.name)"
+          class="context-item danger"
+          @click="deletePath"
+      >
         🗑 Удалить
       </div>
     </div>
@@ -121,7 +160,11 @@
       </div>
     </div>
 
-    <div v-if="showNewFolderDialog" class="overlay" @click.self="showNewFolderDialog = false">
+    <div
+        v-if="showNewFolderDialog"
+        class="overlay"
+        @click.self="showNewFolderDialog = false"
+    >
       <div class="dialog">
         <h3>Новая папка</h3>
         <input v-model="newFolderName" placeholder="папка" />
@@ -135,7 +178,11 @@
     <div v-if="showRenameDialog" class="overlay" @click.self="showRenameDialog = false">
       <div class="dialog">
         <h3>Переименовать</h3>
-        <input v-model="renameNewName" :placeholder="contextMenu.node?.name" @keyup.enter="renameEntry" />
+        <input
+            v-model="renameNewName"
+            :placeholder="contextMenu.node?.name"
+            @keyup.enter="renameEntry"
+        />
         <div class="dialog-actions">
           <button @click="renameEntry">Переименовать</button>
           <button @click="showRenameDialog = false">Отмена</button>
@@ -143,7 +190,11 @@
       </div>
     </div>
 
-    <div v-if="showCreateBranchDialog" class="overlay" @click.self="showCreateBranchDialog = false">
+    <div
+        v-if="showCreateBranchDialog"
+        class="overlay"
+        @click.self="showCreateBranchDialog = false"
+    >
       <div class="dialog">
         <h3>Создание новой ветки</h3>
         <input v-model="newBranchName" placeholder="feature/my-branch" />
@@ -172,6 +223,12 @@ import MonacoEditor from '@guolao/vue-monaco-editor'
 import '@/assets/styles/application/ApplicationEditorView.css'
 
 const server = ref(null)
+
+const showRevertModal = ref(false)
+const revertDateFilter = ref('')
+
+const currentPage = ref(1)
+const commitsPerPage = 5
 
 const route = useRoute()
 const app = ref({})
@@ -921,13 +978,55 @@ const filteredRoot = computed(() => {
   return filterTree(rootEntry.value, query)
 })
 
-const formatDate = (dateStr) => {
-  const d = new Date(dateStr)
-  return d.toLocaleString('ru-RU')
+const formatDate = (raw) => {
+  if (!raw) return '—'
+  const normalized = raw.replace('MSK', '+03:00')
+  const date = new Date(normalized)
+  return isNaN(date.getTime()) ? '—' : date.toLocaleString('ru-RU')
 }
 
 const onEditorChange = (val) => {
   currentFileContent.value = val
+}
+
+const filteredCommitsByDate = computed(() => {
+  if (!revertDateFilter.value) return commits.value
+  return commits.value.filter(c => c.date.startsWith(revertDateFilter.value))
+})
+
+const confirmRevert = async (commit) => {
+  const confirmed = confirm(`Откатить к коммиту: "${commit.message}"?`)
+  if (!confirmed) return
+
+  try {
+    await api.post(`/git/writer/${repo.value.name}/branch/${app.value.branch}/revert`, {
+      commitHash: commit.hash,
+      commitMessage: `Revert to: ${commit.message}`
+    })
+    addToast('Откат выполнен', 'success')
+    showRevertModal.value = false
+    await refreshTree()
+    await loadCommits(currentFileName.value)
+  } catch (e) {
+    addToast('Ошибка при откате', 'error')
+  }
+}
+
+const totalPages = computed(() =>
+    Math.ceil(filteredCommitsByDate.value.length / commitsPerPage)
+)
+
+const paginatedCommits = computed(() => {
+  const start = (currentPage.value - 1) * commitsPerPage
+  return filteredCommitsByDate.value.slice(start, start + commitsPerPage)
+})
+
+const nextPage = () => {
+  if (currentPage.value < totalPages.value) currentPage.value++
+}
+
+const prevPage = () => {
+  if (currentPage.value > 1) currentPage.value--
 }
 
 </script>
