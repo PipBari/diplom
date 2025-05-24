@@ -1,5 +1,6 @@
 package ru.backend.service.validation;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import lombok.RequiredArgsConstructor;
@@ -142,28 +143,144 @@ public class TemplateValidationService {
 
     private Map<String, Integer> extractVarsFromRequests(List<ValidationRequestDto> requests) {
         Map<String, Integer> totals = new HashMap<>();
+        Map<String, Set<Integer>> valuesByName = new HashMap<>();
+        List<String> conflicts = new ArrayList<>();
+        Set<String> usedVars = new HashSet<>();
+        ObjectMapper jsonMapper = new ObjectMapper();
 
-        Pattern varPattern = Pattern.compile(
-                "variable\\s+\"(\\w+)\"\\s*\\{[^}]*?default\\s*=\\s*(\\d+)", Pattern.DOTALL | Pattern.CASE_INSENSITIVE
-        );
-        Pattern localPattern = Pattern.compile(
-                "locals\\s*\\{[^}]*?(\\w+)\\s*=\\s*(\\d+)[^}]*?\\}", Pattern.DOTALL | Pattern.CASE_INSENSITIVE
-        );
-        Pattern resourcePattern = Pattern.compile(
-                "(ram|memory|mem_limit|mem|cpu|vcpus|core)\\s*=\\s*(\\d+)", Pattern.CASE_INSENSITIVE
-        );
+        Pattern varPattern = Pattern.compile("variable\\s+\"(\\w+)\"\\s*\\{[^}]*?default\\s*=\\s*(\\d+)", Pattern.DOTALL | Pattern.CASE_INSENSITIVE);
+        Pattern localPattern = Pattern.compile("locals\\s*\\{[^}]*?(\\w+)\\s*=\\s*(\\d+)[^}]*?\\}", Pattern.DOTALL | Pattern.CASE_INSENSITIVE);
+        Pattern resourcePattern = Pattern.compile("(ram|memory|mem_limit|mem|cpu|vcpus|core|count)\\s*=\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
+        Pattern usedVarPattern = Pattern.compile("var\\.(\\w+)", Pattern.CASE_INSENSITIVE);
 
         for (ValidationRequestDto request : requests) {
             try {
+                String filename = request.getFilename();
                 String content = request.getContent();
-                log.info("[PARSE] Файл: {}", request.getFilename());
+                log.info("[PARSE] Файл: {}", filename);
+
+                Matcher usedMatcher = usedVarPattern.matcher(content);
+                while (usedMatcher.find()) {
+                    usedVars.add(usedMatcher.group(1).toLowerCase());
+                }
+
+                if (filename.endsWith(".tf.json")) {
+                    JsonNode root = jsonMapper.readTree(content);
+
+                    if (root.has("variable")) {
+                        for (Iterator<Map.Entry<String, JsonNode>> it = root.get("variable").fields(); it.hasNext(); ) {
+                            var entry = it.next();
+                            String name = entry.getKey().toLowerCase();
+                            JsonNode def = entry.getValue().get("default");
+                            if (def != null && def.isNumber()) {
+                                int value = def.asInt();
+                                log.info("[VAR(JSON)] {} = {}", name, value);
+                                valuesByName.computeIfAbsent(name, k -> new HashSet<>()).add(value);
+                                if (valuesByName.get(name).size() > 1 && !conflicts.contains(name)) {
+                                    conflicts.add(name);
+                                    log.warn("[CONFLICT] {} имеет разные значения: {}", name, valuesByName.get(name));
+                                }
+                                if (name.contains("ram") || name.contains("mem")) {
+                                    totals.merge("ram", value, Integer::sum);
+                                } else if (name.contains("cpu") || name.contains("core") || name.contains("vcpus")) {
+                                    totals.merge("cpu", value, Integer::sum);
+                                }
+                            }
+                        }
+                    }
+
+                    if (root.has("locals")) {
+                        for (Iterator<Map.Entry<String, JsonNode>> it = root.get("locals").fields(); it.hasNext(); ) {
+                            var entry = it.next();
+                            String name = entry.getKey().toLowerCase();
+                            JsonNode val = entry.getValue();
+                            if (val != null && val.isNumber()) {
+                                int value = val.asInt();
+                                log.info("[LOCAL(JSON)] {} = {}", name, value);
+                                valuesByName.computeIfAbsent(name, k -> new HashSet<>()).add(value);
+                                if (valuesByName.get(name).size() > 1 && !conflicts.contains(name)) {
+                                    conflicts.add(name);
+                                    log.warn("[CONFLICT] {} имеет разные значения: {}", name, valuesByName.get(name));
+                                }
+                                if (name.contains("ram") || name.contains("mem")) {
+                                    totals.merge("ram", value, Integer::sum);
+                                } else if (name.contains("cpu") || name.contains("core") || name.contains("vcpus")) {
+                                    totals.merge("cpu", value, Integer::sum);
+                                }
+                            }
+                        }
+                    }
+
+                    if (root.has("resource")) {
+                        for (Iterator<Map.Entry<String, JsonNode>> it = root.get("resource").fields(); it.hasNext(); ) {
+                            var typeEntry = it.next();
+                            for (Iterator<Map.Entry<String, JsonNode>> rIt = typeEntry.getValue().fields(); rIt.hasNext(); ) {
+                                var res = rIt.next();
+                                JsonNode body = res.getValue();
+
+                                final int count = body.has("count") && body.get("count").isNumber()
+                                        ? body.get("count").asInt() : 1;
+
+                                body.fields().forEachRemaining(attr -> {
+                                    String key = attr.getKey().toLowerCase();
+                                    JsonNode val = attr.getValue();
+                                    if (key.equals("count") || val == null || !val.isNumber()) return;
+
+                                    int v = val.asInt();
+                                    int total = v * count;
+                                    log.info("[RESOURCE(JSON)] {}.{} = {} (count={})", res.getKey(), key, total, count);
+
+                                    if (key.contains("ram") || key.contains("mem")) {
+                                        totals.merge("ram", total, Integer::sum);
+                                    } else if (key.contains("cpu") || key.contains("core") || key.contains("vcpus")) {
+                                        totals.merge("cpu", total, Integer::sum);
+                                    }
+                                });
+                            }
+                        }
+                    }
+
+                    continue;
+                }
+
+                Matcher blockMatcher = Pattern.compile("resource\\s+\"[^\"]+\"\\s+\"[^\"]+\"\\s*\\{([^}]*)\\}", Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(content);
+                while (blockMatcher.find()) {
+                    String block = blockMatcher.group(1);
+                    Matcher resourceAttr = resourcePattern.matcher(block);
+                    int count = 1;
+                    Map<String, Integer> entries = new HashMap<>();
+
+                    while (resourceAttr.find()) {
+                        String name = resourceAttr.group(1).toLowerCase();
+                        int value = Integer.parseInt(resourceAttr.group(2));
+                        if (name.equals("count")) {
+                            count = value;
+                        } else {
+                            entries.put(name, value);
+                        }
+                    }
+
+                    for (Map.Entry<String, Integer> e : entries.entrySet()) {
+                        int total = e.getValue() * count;
+                        log.info("[RESOURCE] {} = {} (count={})", e.getKey(), total, count);
+                        if (e.getKey().contains("ram") || e.getKey().contains("mem")) {
+                            totals.merge("ram", total, Integer::sum);
+                        } else if (e.getKey().contains("cpu") || e.getKey().contains("core") || e.getKey().contains("vcpus")) {
+                            totals.merge("cpu", total, Integer::sum);
+                        }
+                    }
+                }
 
                 Matcher varMatcher = varPattern.matcher(content);
                 while (varMatcher.find()) {
                     String name = varMatcher.group(1).toLowerCase();
                     int value = Integer.parseInt(varMatcher.group(2));
                     log.info("[VAR] {} = {}", name, value);
-
+                    valuesByName.computeIfAbsent(name, k -> new HashSet<>()).add(value);
+                    if (valuesByName.get(name).size() > 1 && !conflicts.contains(name)) {
+                        conflicts.add(name);
+                        log.warn("[CONFLICT] {} имеет разные значения: {}", name, valuesByName.get(name));
+                    }
                     if (name.contains("ram") || name.contains("mem")) {
                         totals.merge("ram", value, Integer::sum);
                     } else if (name.contains("cpu") || name.contains("core") || name.contains("vcpus")) {
@@ -176,20 +293,11 @@ public class TemplateValidationService {
                     String name = localMatcher.group(1).toLowerCase();
                     int value = Integer.parseInt(localMatcher.group(2));
                     log.info("[LOCAL] {} = {}", name, value);
-
-                    if (name.contains("ram") || name.contains("mem")) {
-                        totals.merge("ram", value, Integer::sum);
-                    } else if (name.contains("cpu") || name.contains("core") || name.contains("vcpus")) {
-                        totals.merge("cpu", value, Integer::sum);
+                    valuesByName.computeIfAbsent(name, k -> new HashSet<>()).add(value);
+                    if (valuesByName.get(name).size() > 1 && !conflicts.contains(name)) {
+                        conflicts.add(name);
+                        log.warn("[CONFLICT] {} имеет разные значения: {}", name, valuesByName.get(name));
                     }
-                }
-
-                Matcher resMatcher = resourcePattern.matcher(content);
-                while (resMatcher.find()) {
-                    String name = resMatcher.group(1).toLowerCase();
-                    int value = Integer.parseInt(resMatcher.group(2));
-                    log.info("[RESOURCE] {} = {}", name, value);
-
                     if (name.contains("ram") || name.contains("mem")) {
                         totals.merge("ram", value, Integer::sum);
                     } else if (name.contains("cpu") || name.contains("core") || name.contains("vcpus")) {
@@ -199,6 +307,16 @@ public class TemplateValidationService {
 
             } catch (Exception e) {
                 log.warn("Ошибка парсинга файла {}: {}", request.getFilename(), e.getMessage());
+            }
+        }
+
+        if (!conflicts.isEmpty()) {
+            log.warn("[VAR CONFLICTS DETECTED] {}", conflicts);
+        }
+
+        for (String used : usedVars) {
+            if (!valuesByName.containsKey(used)) {
+                log.warn("[UNDECLARED VAR] Использована переменная var.{} без определения", used);
             }
         }
 
