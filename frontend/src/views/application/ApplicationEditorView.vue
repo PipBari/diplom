@@ -991,7 +991,16 @@ const onEditorChange = (val) => {
 
 const filteredCommitsByDate = computed(() => {
   if (!revertDateFilter.value) return commits.value
-  return commits.value.filter(c => c.date.startsWith(revertDateFilter.value))
+
+  const selected = new Date(revertDateFilter.value)
+  return commits.value.filter(c => {
+    const commitDate = new Date(c.date.replace('MSK', '+03:00'))
+    return (
+        commitDate.getFullYear() === selected.getFullYear() &&
+        commitDate.getMonth() === selected.getMonth() &&
+        commitDate.getDate() === selected.getDate()
+    )
+  })
 })
 
 const confirmRevert = async (commit) => {
