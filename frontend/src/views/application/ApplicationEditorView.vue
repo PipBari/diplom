@@ -283,7 +283,7 @@ const enrichEntry = (entry, parentPath) => {
 
 const fetchBranches = async () => {
   try {
-    const res = await api.get(`/git/writer/${repo.value.name}/branches`)
+    const res = await api.get(`/git/writer/repo/branches`, {params: {url: repo.value.repoUrl, username: repo.value.username, token: repo.value.token}})
     availableBranches.value = res.data
     currentBranch.value = app.value.branch
   } catch (e) {
@@ -306,8 +306,11 @@ const createBranch = async () => {
   }
 
   try {
-    await api.post(`/git/writer/${repo.value.name}/branch`, null, {
+    await api.post(`/git/writer/repo/branch`, null, {
       params: {
+        url: repo.value.repoUrl,
+        username: repo.value.username,
+        token: repo.value.token,
         name,
         from: currentBranch.value
       }
@@ -345,7 +348,14 @@ const deleteBranch = async () => {
   if (!confirmed) return
 
   try {
-    await api.delete(`/git/writer/${repo.value.name}/branch/${currentBranch.value}`)
+    await api.delete(`/git/writer/repo/branch`, {
+      params: {
+        url: repo.value.repoUrl,
+        username: repo.value.username,
+        token: repo.value.token,
+        branch: currentBranch.value
+      }
+    })
     addToast(`Ветка "${currentBranch.value}" удалена`, 'success')
     await fetchBranches()
     currentBranch.value = availableBranches.value[0] || ''

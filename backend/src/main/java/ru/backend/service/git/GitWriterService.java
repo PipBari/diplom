@@ -215,8 +215,21 @@ public class GitWriterService {
                 .setCloneAllBranches(true)
                 .call()) {
 
-            String fallbackBranch = "main";
-            if (branch.equals(fallbackBranch)) fallbackBranch = "develop";
+            List<String> branches = git.branchList()
+                    .setListMode(ListBranchCommand.ListMode.ALL)
+                    .call()
+                    .stream()
+                    .map(ref -> ref.getName().replace("refs/remotes/origin/", ""))
+                    .filter(name -> !name.equals(branch))
+                    .toList();
+
+            if (branches.isEmpty()) {
+                throw new IllegalStateException("Невозможно удалить последнюю ветку — больше некуда переключиться.");
+            }
+
+            String fallbackBranch = branches.contains("main") ? "main"
+                    : branches.contains("master") ? "master"
+                    : branches.get(0);
 
             git.checkout().setName(fallbackBranch).call();
 

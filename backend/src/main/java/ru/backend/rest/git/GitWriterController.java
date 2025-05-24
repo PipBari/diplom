@@ -10,6 +10,7 @@ import ru.backend.service.application.ApplicationService;
 import ru.backend.service.git.GitService;
 import ru.backend.service.git.GitWriterService;
 import ru.backend.service.validation.TemplateValidationService;
+import ru.backend.util.EncryptionUtils;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -96,16 +97,32 @@ public class GitWriterController {
         }
     }
 
-    @GetMapping("/{repo}/branches")
-    public ResponseEntity<List<String>> listBranches(@PathVariable String repo) {
-        GitConnectionRequestDto dto = gitService.getByName(repo);
-        return ResponseEntity.ok(gitWriterService.listBranches(dto));
+    @GetMapping("/repo/branches")
+    public ResponseEntity<List<String>> listBranches(@RequestParam String url, @RequestParam String username, @RequestParam String token) {
+        try {
+            GitConnectionRequestDto dto = new GitConnectionRequestDto();
+            dto.setRepoUrl(url);
+            dto.setUsername(username);
+            dto.setToken(token);
+            return ResponseEntity.ok(gitWriterService.listBranches(dto));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(List.of("Ошибка: " + e.getMessage()));
+        }
     }
 
-    @PostMapping("/{repo}/branch")
-    public ResponseEntity<String> createBranch(@PathVariable String repo, @RequestParam String name, @RequestParam String from) {
+    @PostMapping("/repo/branch")
+    public ResponseEntity<String> createBranch(
+            @RequestParam String url,
+            @RequestParam String username,
+            @RequestParam String token,
+            @RequestParam String name,
+            @RequestParam String from
+    ) {
         try {
-            GitConnectionRequestDto dto = gitService.getByName(repo);
+            GitConnectionRequestDto dto = new GitConnectionRequestDto();
+            dto.setRepoUrl(url);
+            dto.setUsername(username);
+            dto.setToken(token);
             gitWriterService.createBranch(dto, name, from);
             return ResponseEntity.ok("Ветка создана: " + name);
         } catch (Exception e) {
@@ -113,10 +130,18 @@ public class GitWriterController {
         }
     }
 
-    @DeleteMapping("/{repo}/branch/{branch}")
-    public ResponseEntity<String> deleteBranch(@PathVariable String repo, @PathVariable String branch) {
+    @DeleteMapping("/repo/branch")
+    public ResponseEntity<String> deleteBranch(
+            @RequestParam String url,
+            @RequestParam String username,
+            @RequestParam String token,
+            @RequestParam String branch
+    ) {
         try {
-            GitConnectionRequestDto dto = gitService.getByName(repo);
+            GitConnectionRequestDto dto = new GitConnectionRequestDto();
+            dto.setRepoUrl(url);
+            dto.setUsername(username);
+            dto.setToken(token);
             gitWriterService.deleteBranch(dto, branch);
             return ResponseEntity.ok("Ветка удалена: " + branch);
         } catch (Exception e) {
