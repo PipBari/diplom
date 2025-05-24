@@ -86,11 +86,13 @@
       <div style="width: 100%; height: 100%; min-width: 0;">
         <MonacoEditor
             v-if="currentFileContent !== null"
-            v-model:value="currentFileContent"
+            :value="currentFileContent"
             :language="getLanguageForFile(currentFileName)"
-            :key="currentFileName + ':' + currentFileContent?.length"
+            :key="currentFileName"
             theme="vs"
             class="editor-textarea"
+            @change="onEditorChange"
+            ref="monaco"
         />
       </div>
     </div>
@@ -178,8 +180,10 @@ const rootEntry = ref(null)
 const commits = ref([])
 const serverInfo = ref(null)
 
+const monaco = ref(null)
+
 const currentFileName = ref('')
-const currentFileContent = ref(null)
+const currentFileContent = ref('')
 
 const showNewFileDialog = ref(false)
 const showNewFolderDialog = ref(false)
@@ -415,11 +419,12 @@ const loadEntry = async (path) => {
   if (!path || path.endsWith('/')) return
 
   try {
-    currentFileContent.value = null
+    currentFileContent.value = ''
     currentFileName.value = path
     const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/file`, {
       params: { path }
     })
+
     await nextTick()
     currentFileContent.value = res.data
     await loadCommits(path)
@@ -919,6 +924,10 @@ const filteredRoot = computed(() => {
 const formatDate = (dateStr) => {
   const d = new Date(dateStr)
   return d.toLocaleString('ru-RU')
+}
+
+const onEditorChange = (val) => {
+  currentFileContent.value = val
 }
 
 </script>
