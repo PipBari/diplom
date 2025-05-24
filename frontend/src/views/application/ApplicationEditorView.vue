@@ -1,8 +1,29 @@
 <template>
   <div class="editor-layout">
     <div class="file-tree" @contextmenu.prevent="showContextMenu($event, null)" @dragover.prevent="onRootDragOver" @dragleave="onRootDragLeave" @drop="onRootDrop" :class="{ 'drag-over': isRootDragOver }">
+      <div class="file-search">
+        <input
+            v-model="searchQuery"
+            @keyup.enter="searchInFiles"
+            placeholder="Поиск по файлам..."
+            class="search-input"
+        />
+      </div>
+
+      <div class="search-results" v-if="searchResults.length > 0">
+        <div
+            v-for="r in searchResults"
+            :key="r.file + ':' + r.line"
+            class="search-result"
+            @click="() => goToSearchResult(r)"
+        >
+          <strong>{{ r.file }}</strong> — строка {{ r.line }}<br />
+          <code>{{ r.content }}</code>
+        </div>
+      </div>
+
       <FileTreeNode
-          v-for="child in rootEntry?.children || []"
+          v-for="child in filteredRoot?.children || []"
           :key="child.fullPath"
           :node="child"
           :fullPath="child.fullPath"
@@ -143,6 +164,7 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api/axios'
 import FileTreeNode from '@/components/FileTreeNode.vue'
+import { computed } from 'vue'
 import MonacoEditor from '@guolao/vue-monaco-editor'
 import '@/assets/styles/application/ApplicationEditorView.css'
 
@@ -161,6 +183,9 @@ const currentFileContent = ref(null)
 const showNewFileDialog = ref(false)
 const showNewFolderDialog = ref(false)
 const showRenameDialog = ref(false)
+
+const searchQuery = ref('')
+const searchResults = ref([])
 
 const newFileName = ref('')
 const newFolderName = ref('')
@@ -223,8 +248,13 @@ onMounted(async () => {
     }
 
     const reposRes = await api.get('/settings/git')
-    repo.value = reposRes.data.find(r => r.name === app.value.repoName)
-    if (!repo.value) throw new Error('Репозиторий не найден')
+    repo.value = reposRes.data.find(r => r.name === app.value.repoName || r.repoUrl === app.value.repoName)
+
+    if (!repo.value || !repo.value.repoUrl) {
+      console.error('Репозиторий не найден или repoUrl отсутствует:', app.value.repoName)
+      addToast('Ошибка: репозиторий не найден или некорректен', 'error')
+      return
+    }
 
     await refreshTree()
     await pollCiStatus()
@@ -283,7 +313,11 @@ const enrichEntry = (entry, parentPath) => {
 
 const fetchBranches = async () => {
   try {
-    const res = await api.get(`/git/writer/repo/branches`, {params: {url: repo.value.repoUrl, username: repo.value.username, token: repo.value.token}})
+    const res = await api.post(`/git/writer/branches`, {
+      url: repo.value.repoUrl,
+      username: repo.value.username,
+      token: repo.value.token
+    })
     availableBranches.value = res.data
     currentBranch.value = app.value.branch
   } catch (e) {
@@ -306,14 +340,12 @@ const createBranch = async () => {
   }
 
   try {
-    await api.post(`/git/writer/repo/branch`, null, {
-      params: {
-        url: repo.value.repoUrl,
-        username: repo.value.username,
-        token: repo.value.token,
-        name,
-        from: currentBranch.value
-      }
+    await api.post(`/git/writer/repo/branch`, {
+      url: repo.value.repoUrl,
+      username: repo.value.username,
+      token: repo.value.token,
+      name,
+      from: currentBranch.value
     })
 
     const pathExistsRes = await api.get(`/git/writer/${repo.value.name}/branch/${name}/path/exists`, {
@@ -348,12 +380,17 @@ const deleteBranch = async () => {
   if (!confirmed) return
 
   try {
-    await api.delete(`/git/writer/repo/branch`, {
-      params: {
+    await api.request({
+      url: `/git/writer/repo/branch`,
+      method: 'delete',
+      data: {
         url: repo.value.repoUrl,
         username: repo.value.username,
         token: repo.value.token,
         branch: currentBranch.value
+      },
+      headers: {
+        'Content-Type': 'application/json'
       }
     })
 
@@ -808,5 +845,71 @@ const onRootDrop = async (e) => {
     addToast(err.response?.data?.message || 'Ошибка при перемещении', 'error')
   }
 }
+
+const searchInFiles = async () => {
+  searchResults.value = []
+
+  const allEntries = []
+  const collectFiles = (node) => {
+    if (node.type === 'file') allEntries.push(node)
+    if (node.children) node.children.forEach(collectFiles)
+  }
+  collectFiles(rootEntry.value)
+
+  const matches = []
+
+  for (const node of allEntries) {
+    try {
+      const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/file`, {
+        params: { path: node.fullPath }
+      })
+
+      const lines = res.data.split('\n')
+      lines.forEach((line, index) => {
+        if (line.toLowerCase().includes(searchQuery.value.toLowerCase())) {
+          matches.push({
+            file: node.fullPath,
+            line: index + 1,
+            content: line.trim()
+          })
+        }
+      })
+    } catch {
+    }
+  }
+
+  searchResults.value = matches
+}
+
+const goToSearchResult = async (result) => {
+  await loadEntry(result.file)
+  addToast(`Открыт ${result.file} (строка ${result.line})`, 'info')
+}
+
+
+const filterTree = (entry, query) => {
+  if (!entry.children || entry.children.length === 0) {
+    return entry.name.toLowerCase().includes(query) ? entry : null
+  }
+
+  const filteredChildren = entry.children
+      .map(child => filterTree(child, query))
+      .filter(Boolean)
+
+  if (filteredChildren.length > 0 || entry.name.toLowerCase().includes(query)) {
+    return {
+      ...entry,
+      children: filteredChildren
+    }
+  }
+
+  return null
+}
+
+const filteredRoot = computed(() => {
+  const query = searchQuery.value.toLowerCase().trim()
+  if (!query) return rootEntry.value
+  return filterTree(rootEntry.value, query)
+})
 
 </script>

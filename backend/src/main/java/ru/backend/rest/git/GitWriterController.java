@@ -15,6 +15,7 @@ import ru.backend.util.EncryptionUtils;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 
 @RestController
@@ -97,19 +98,21 @@ public class GitWriterController {
         }
     }
 
-    @GetMapping("/branches")
-    public ResponseEntity<List<String>> listBranches(GitConnectionRequestDto dto) {
+    @PostMapping("/branches")
+    public ResponseEntity<List<String>> listBranches(@RequestBody Map<String, String> raw) {
         try {
+            GitConnectionRequestDto dto = new GitConnectionRequestDto();
+            dto.setRepoUrl(raw.get("url"));
+            dto.setUsername(raw.get("username"));
+            dto.setToken(raw.get("token"));
             return ResponseEntity.ok(gitWriterService.listBranches(dto));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(List.of("Ошибка: " + e.getMessage()));
         }
     }
 
-    @PostMapping("/branch")
-    public ResponseEntity<String> createBranch(
-            @RequestBody GitBranchCreateRequest request
-    ) {
+    @PostMapping("/repo/branch")
+    public ResponseEntity<String> createBranch(@RequestBody GitBranchCreateRequest request) {
         try {
             gitWriterService.createBranch(request.toConnectionDto(), request.getName(), request.getFrom());
             return ResponseEntity.ok("Ветка создана: " + request.getName());
@@ -118,7 +121,7 @@ public class GitWriterController {
         }
     }
 
-    @DeleteMapping("/branch")
+    @DeleteMapping("/repo/branch")
     public ResponseEntity<String> deleteBranch(@RequestBody GitBranchDeleteRequest request) {
         try {
             gitWriterService.deleteBranch(request.toConnectionDto(), request.getBranch());

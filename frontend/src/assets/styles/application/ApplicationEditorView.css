@@ -333,3 +333,41 @@
     gap: 6px;
 }
 
+.file-search {
+    padding: 8px;
+    border-bottom: 1px solid #ddd;
+    background: #f9f9f9;
+}
+
+.search-input {
+    width: 95%;
+    padding: 6px 10px;
+    font-size: 13px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    box-sizing: border-box;
+    margin: 0 auto;
+    display: block;
+}
+
+.search-results {
+    max-height: 300px;
+    overflow-y: auto;
+    background: #fdfdfd;
+    padding: 8px;
+    border-top: 1px solid #ccc;
+}
+
+.search-result {
+    cursor: pointer;
+    margin-bottom: 10px;
+    padding: 5px;
+    border-left: 3px solid #888;
+    background: #f9f9f9;
+}
+
+.search-result:hover {
+    background: #eaeaea;
+}
+
+
