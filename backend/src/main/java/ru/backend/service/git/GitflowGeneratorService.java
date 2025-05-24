@@ -215,7 +215,7 @@ public class GitflowGeneratorService {
               workflow_dispatch:
                 inputs:
                   rollback:
-                    description: 'Run rollback script instead of deploy'
+                    description: 'Run rollback script manually'
                     required: false
                     default: 'false'
 
@@ -232,6 +232,7 @@ public class GitflowGeneratorService {
                     uses: actions/checkout@v3
 
                   - name: SSH Deploy
+                    id: deploy_step
                     uses: appleboy/ssh-action@master
                     with:
                       host: %s
@@ -243,7 +244,8 @@ public class GitflowGeneratorService {
                         bash ./deploy.sh
 
               rollback:
-                if: ${{ github.event.inputs.rollback == 'true' }}
+                if: ${{ failure() && github.event.inputs.rollback != 'true' }}
+                needs: deploy
                 runs-on: ubuntu-22.04
                 env:
                   GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
