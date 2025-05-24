@@ -389,3 +389,45 @@
     opacity: 0.5;
     cursor: not-allowed;
 }
+
+.tabs-bar {
+    display: flex;
+    height: 36px;
+    background-color: #f0f0f0;
+    border-bottom: 1px solid #ccc;
+    padding-left: 8px;
+    align-items: flex-end;
+}
+
+.tab {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    margin-right: 4px;
+    background: #dcdcdc;
+    border: 1px solid #aaa;
+    border-bottom: none;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    height: 100%;
+    font-size: 13px;
+    color: #333;
+    cursor: pointer;
+}
+
+.tab.active {
+    background: white;
+    font-weight: bold;
+    border-bottom: 1px solid white;
+}
+
+.close-btn {
+    margin-left: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    color: #666;
+}
+
+.close-btn:hover {
+    color: #000;
+}

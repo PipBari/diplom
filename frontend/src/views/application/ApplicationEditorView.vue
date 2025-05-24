@@ -49,7 +49,6 @@
         {{ serverInfo.status }} —
         <strong>CPU:</strong> {{ serverInfo.cpu || '—' }} —
         <strong>RAM:</strong> {{ formatRam(serverInfo.ram) }}
-
         <template v-if="workflowUrl && ciStatus">
           — <strong>Deployment Status:</strong>
           <a :href="workflowUrl" target="_blank">
@@ -79,6 +78,18 @@
           💬 {{ commits[0].message }} — {{ commits[0].author }},
           {{ formatDate(commits[0].date) }}
           <button @click="showRevertModal = true">↩️ Откатить</button>
+        </div>
+      </div>
+
+      <div class="tabs-bar">
+        <div
+            v-for="tab in openTabs"
+            :key="tab.path"
+            :class="['tab', { active: tab.path === activeTab }]"
+            @click="switchTab(tab.path)"
+        >
+          {{ tab.path.split('/').pop() }}
+          <span class="close-btn" @click.stop="closeTab(tab.path)">×</span>
         </div>
       </div>
 
@@ -229,6 +240,9 @@ const revertDateFilter = ref('')
 
 const currentPage = ref(1)
 const commitsPerPage = 5
+
+const openTabs = ref([])
+const activeTab = ref(null)
 
 const route = useRoute()
 const app = ref({})
@@ -475,6 +489,15 @@ const deleteBranch = async () => {
 const loadEntry = async (path) => {
   if (!path || path.endsWith('/')) return
 
+  const existingTab = openTabs.value.find(t => t.path === path)
+  if (existingTab) {
+    activeTab.value = path
+    currentFileName.value = path
+    currentFileContent.value = existingTab.content
+    await loadCommits(path)
+    return
+  }
+
   try {
     currentFileContent.value = ''
     currentFileName.value = path
@@ -482,8 +505,11 @@ const loadEntry = async (path) => {
       params: { path }
     })
 
-    await nextTick()
-    currentFileContent.value = res.data
+    const content = res.data
+
+    openTabs.value.push({ path, content })
+    activeTab.value = path
+    currentFileContent.value = content
     await loadCommits(path)
   } catch (e) {
     addToast('Ошибка при загрузке файла', 'error')
@@ -987,6 +1013,8 @@ const formatDate = (raw) => {
 
 const onEditorChange = (val) => {
   currentFileContent.value = val
+  const tab = openTabs.value.find(t => t.path === activeTab.value)
+  if (tab) tab.content = val
 }
 
 const filteredCommitsByDate = computed(() => {
@@ -1036,6 +1064,34 @@ const nextPage = () => {
 
 const prevPage = () => {
   if (currentPage.value > 1) currentPage.value--
+}
+
+const switchTab = async (path) => {
+  const tab = openTabs.value.find(t => t.path === path)
+  if (!tab) return
+  activeTab.value = path
+  currentFileName.value = path
+  currentFileContent.value = tab.content
+
+  await loadCommits(path)
+}
+
+
+const closeTab = (path) => {
+  const index = openTabs.value.findIndex(t => t.path === path)
+  if (index !== -1) {
+    openTabs.value.splice(index, 1)
+    if (activeTab.value === path) {
+      const next = openTabs.value[index] || openTabs.value[index - 1]
+      if (next) {
+        switchTab(next.path)
+      } else {
+        currentFileName.value = ''
+        currentFileContent.value = null
+        activeTab.value = null
+      }
+    }
+  }
 }
 
 </script>
