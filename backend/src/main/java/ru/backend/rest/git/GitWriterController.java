@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import ru.backend.rest.git.dto.*;
 import ru.backend.rest.validation.dto.ValidationResultDto;
+import ru.backend.service.application.ApplicationService;
 import ru.backend.service.git.GitService;
 import ru.backend.service.git.GitWriterService;
 import ru.backend.service.validation.TemplateValidationService;
@@ -23,6 +24,7 @@ public class GitWriterController {
     private final GitWriterService gitWriterService;
     private final GitService gitService;
     private final TemplateValidationService validationService;
+    private final ApplicationService applicationService;
 
     @GetMapping("/{name}/branch/{branch}/exists")
     public ResponseEntity<?> branchExists(@PathVariable String name, @PathVariable String branch) {
@@ -91,6 +93,34 @@ public class GitWriterController {
             return ResponseEntity.status(404).body(new ValidationResultDto(false, "Репозиторий не найден: " + e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(new ValidationResultDto(false, "Ошибка при сохранении: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{repo}/branches")
+    public ResponseEntity<List<String>> listBranches(@PathVariable String repo) {
+        GitConnectionRequestDto dto = gitService.getByName(repo);
+        return ResponseEntity.ok(gitWriterService.listBranches(dto));
+    }
+
+    @PostMapping("/{repo}/branch")
+    public ResponseEntity<String> createBranch(@PathVariable String repo, @RequestParam String name, @RequestParam String from) {
+        try {
+            GitConnectionRequestDto dto = gitService.getByName(repo);
+            gitWriterService.createBranch(dto, name, from);
+            return ResponseEntity.ok("Ветка создана: " + name);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка при создании ветки: " + e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/{repo}/branch/{branch}")
+    public ResponseEntity<String> deleteBranch(@PathVariable String repo, @PathVariable String branch) {
+        try {
+            GitConnectionRequestDto dto = gitService.getByName(repo);
+            gitWriterService.deleteBranch(dto, branch);
+            return ResponseEntity.ok("Ветка удалена: " + branch);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Ошибка при удалении ветки: " + e.getMessage());
         }
     }
 

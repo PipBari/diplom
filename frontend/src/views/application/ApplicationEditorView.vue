@@ -20,13 +20,22 @@
         <span :class="getStatusClass(serverInfo.status)">●</span> {{ serverInfo.status }} —
         <strong>CPU:</strong> {{ serverInfo.cpu || '—' }} —
         <strong>RAM:</strong> {{ formatRam(serverInfo.ram) }}
+
+        <template v-if="workflowUrl && ciStatus">
+          — <strong>Deployment Status:</strong>
+          <a :href="workflowUrl" target="_blank">
+            <span :class="getCiStatusClass(ciStatus)">●</span> {{ ciStatus }}
+          </a>
+        </template>
       </div>
 
-      <div v-if="serverInfo && workflowUrl && ciStatus" class="ci-status-inline">
-        <strong>CI/CD:</strong>
-        <a :href="workflowUrl" target="_blank">
-          <span :class="getCiStatusClass(ciStatus)">●</span> {{ ciStatus }}
-        </a>
+      <div class="branch-selector">
+        <label>Ветка: </label>
+        <select v-model="currentBranch" @change="switchBranch">
+          <option v-for="b in availableBranches" :key="b" :value="b">{{ b }}</option>
+        </select>
+        <button @click="showCreateBranchDialog = true">+ Ветка</button>
+        <button @click="deleteBranch" :disabled="!currentBranch || currentBranch === 'main'">🗑 Удалить</button>
       </div>
 
       <div class="commit-header" v-if="commits.length > 0">
@@ -64,19 +73,15 @@
       </div>
     </div>
 
-    <div
-        v-if="contextMenu.visible"
-        class="context-menu"
-        :style="{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }"
-    >
+    <div v-if="contextMenu.visible"
+         class="context-menu"
+         :style="{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }">
       <div class="context-item" @click="openNewFileDialog">📄 Новый файл</div>
       <div class="context-item" @click="openNewFolderDialog">📁 Новая папка</div>
       <div v-if="contextMenu.node" class="context-item" @click="openRenameDialog">✏️ Переименовать</div>
-      <div
-          v-if="contextMenu.node && canDelete(contextMenu.node.name)"
-          class="context-item danger"
-          @click="deletePath"
-      >
+      <div v-if="contextMenu.node && canDelete(contextMenu.node.name)"
+           class="context-item danger"
+           @click="deletePath">
         🗑 Удалить
       </div>
     </div>
@@ -110,6 +115,17 @@
         <div class="dialog-actions">
           <button @click="renameEntry">Переименовать</button>
           <button @click="showRenameDialog = false">Отмена</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showCreateBranchDialog" class="overlay" @click.self="showCreateBranchDialog = false">
+      <div class="dialog">
+        <h3>Создание новой ветки</h3>
+        <input v-model="newBranchName" placeholder="feature/my-branch" />
+        <div class="dialog-actions">
+          <button @click="createBranch">Создать</button>
+          <button @click="showCreateBranchDialog = false">Отмена</button>
         </div>
       </div>
     </div>
@@ -152,6 +168,11 @@ const renameNewName = ref('')
 
 const workflowUrl = ref(null)
 const ciStatus = ref(null)
+
+const currentBranch = ref('')
+const availableBranches = ref([])
+const showCreateBranchDialog = ref(false)
+const newBranchName = ref('')
 
 const contextMenu = ref({ visible: false, x: 0, y: 0, node: null })
 const showCommitHistory = ref(false)
@@ -207,6 +228,8 @@ onMounted(async () => {
 
     await refreshTree()
     await pollCiStatus()
+    await fetchBranches()
+    await refreshTree()
 
     document.addEventListener('click', () => (contextMenu.value.visible = false))
   } catch (err) {
@@ -229,8 +252,9 @@ const generateGitflow = async () => {
 }
 
 const refreshTree = async () => {
+  const path = app.value.path || ''
   const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/entry`, {
-    params: { path: app.value.path }
+    params: { path }
   })
   rootEntry.value = enrichEntry(res.data, '')
 }
@@ -255,6 +279,81 @@ const enrichEntry = (entry, parentPath) => {
   }
 
   return entry
+}
+
+const fetchBranches = async () => {
+  try {
+    const res = await api.get(`/git/writer/${repo.value.name}/branches`)
+    availableBranches.value = res.data
+    currentBranch.value = app.value.branch
+  } catch (e) {
+    addToast('Ошибка при загрузке веток', 'error')
+  }
+}
+
+const switchBranch = async () => {
+  app.value.branch = currentBranch.value
+  await refreshTree()
+  await loadCommits(currentFileName.value)
+  addToast(`Переключено на ветку ${currentBranch.value}`, 'success')
+}
+
+const createBranch = async () => {
+  const name = newBranchName.value.trim()
+  if (!name) {
+    addToast('Имя ветки не может быть пустым', 'error')
+    return
+  }
+
+  try {
+    await api.post(`/git/writer/${repo.value.name}/branch`, null, {
+      params: {
+        name,
+        from: currentBranch.value
+      }
+    })
+
+    const pathExistsRes = await api.get(`/git/writer/${repo.value.name}/branch/${name}/path/exists`, {
+      params: { path: app.value.path }
+    })
+
+    if (!pathExistsRes.data) {
+      await api.post(`/git/writer/${repo.value.name}/branch/${name}/create-folder`, {
+        path: app.value.path,
+        commitMessage: `Инициализация директории ${app.value.path}`
+      })
+    }
+
+    await fetchBranches()
+    currentBranch.value = name
+    app.value.branch = name
+    showCreateBranchDialog.value = false
+    await refreshTree()
+    addToast(`Ветка ${name} создана и готова к работе`, 'success')
+  } catch (e) {
+    addToast(e.response?.data || 'Ошибка при создании ветки', 'error')
+  }
+}
+
+const deleteBranch = async () => {
+  if (!currentBranch.value) {
+    addToast('Ветка не выбрана', 'error')
+    return
+  }
+
+  const confirmed = confirm(`Удалить ветку "${currentBranch.value}"?`)
+  if (!confirmed) return
+
+  try {
+    await api.delete(`/git/writer/${repo.value.name}/branch/${currentBranch.value}`)
+    addToast(`Ветка "${currentBranch.value}" удалена`, 'success')
+    await fetchBranches()
+    currentBranch.value = availableBranches.value[0] || ''
+    app.value.branch = currentBranch.value
+    await refreshTree()
+  } catch (e) {
+    addToast(e.response?.data || 'Ошибка при удалении ветки', 'error')
+  }
 }
 
 const loadEntry = async (path) => {

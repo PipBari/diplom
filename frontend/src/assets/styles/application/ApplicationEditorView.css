@@ -320,3 +320,16 @@
     gap: 8px;
     flex-wrap: wrap;
 }
+
+.branch-selector-inline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ci-status-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+

@@ -2,9 +2,11 @@ package ru.backend.service.git;
 
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.ListBranchCommand;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.transport.RefSpec;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.springframework.stereotype.Service;
 import ru.backend.rest.git.dto.*;
@@ -155,6 +157,82 @@ public class GitWriterService {
             if (tempDir != null) deleteDirectory(tempDir);
         }
         return result;
+    }
+
+    public List<String> listBranches(GitConnectionRequestDto repo) {
+        File tempDir = null;
+        try {
+            tempDir = Files.createTempDirectory("repo-branches").toFile();
+            Git git = Git.cloneRepository()
+                    .setURI(repo.getRepoUrl())
+                    .setDirectory(tempDir)
+                    .setCredentialsProvider(getCredentials(repo))
+                    .setNoCheckout(true)
+                    .call();
+
+            return git.branchList()
+                    .setListMode(ListBranchCommand.ListMode.ALL)
+                    .call()
+                    .stream()
+                    .map(ref -> ref.getName().replace("refs/remotes/origin/", ""))
+                    .distinct()
+                    .toList();
+
+        } catch (Exception e) {
+            log.error("Ошибка при получении списка веток: {}", e.getMessage());
+            return Collections.emptyList();
+        } finally {
+            if (tempDir != null) deleteDirectory(tempDir);
+        }
+    }
+
+    public void createBranch(GitConnectionRequestDto repo, String newBranch, String baseBranch) throws Exception {
+        File tempDir = Files.createTempDirectory("repo-create-branch").toFile();
+        try (Git git = Git.cloneRepository()
+                .setURI(repo.getRepoUrl())
+                .setBranch(baseBranch)
+                .setDirectory(tempDir)
+                .setCredentialsProvider(getCredentials(repo))
+                .call()) {
+
+            git.checkout().setCreateBranch(true).setName(newBranch).call();
+            git.push()
+                    .setCredentialsProvider(getCredentials(repo))
+                    .setPushAll()
+                    .call();
+
+        } finally {
+            deleteDirectory(tempDir);
+        }
+    }
+
+    public void deleteBranch(GitConnectionRequestDto repo, String branch) throws Exception {
+        File tempDir = Files.createTempDirectory("repo-delete-branch").toFile();
+        try (Git git = Git.cloneRepository()
+                .setURI(repo.getRepoUrl())
+                .setDirectory(tempDir)
+                .setCredentialsProvider(getCredentials(repo))
+                .setCloneAllBranches(true)
+                .call()) {
+
+            String fallbackBranch = "main";
+            if (branch.equals(fallbackBranch)) fallbackBranch = "develop";
+
+            git.checkout().setName(fallbackBranch).call();
+
+            git.branchDelete()
+                    .setBranchNames(branch)
+                    .setForce(true)
+                    .call();
+
+            git.push()
+                    .setRefSpecs(new RefSpec(":" + "refs/heads/" + branch))
+                    .setCredentialsProvider(getCredentials(repo))
+                    .call();
+
+        } finally {
+            deleteDirectory(tempDir);
+        }
     }
 
     private List<FileNodeDto> readChildrenRecursive(File dir) {
