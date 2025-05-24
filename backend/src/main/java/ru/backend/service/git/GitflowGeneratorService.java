@@ -12,6 +12,7 @@ import ru.backend.rest.git.dto.GitConnectionRequestDto;
 import ru.backend.rest.settings.dto.ServersDto;
 import ru.backend.service.application.ApplicationService;
 import ru.backend.service.settings.ServersService;
+import ru.backend.util.EncryptionUtils;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -80,6 +81,7 @@ public class GitflowGeneratorService {
 
         sb.append("if [ ! -d .git ]; then\n");
         sb.append("  echo 'Репозиторий не найден, клонируем...'\n");
+        sb.append("  rm -rf .tmp_clone\n");
         sb.append("  git clone https://${GIT_USERNAME}:${GIT_TOKEN}@github.com/%s .tmp_clone\n".formatted(repoPath));
         sb.append("  mv .tmp_clone/.git ./\n");
         sb.append("  cp -r .tmp_clone/* .\n");
@@ -188,7 +190,7 @@ public class GitflowGeneratorService {
         try {
             JSch jsch = new JSch();
             Session session = jsch.getSession(server.getSpecify_username(), server.getHost(), server.getPort());
-            session.setPassword(server.getPassword());
+            session.setPassword(EncryptionUtils.decrypt(server.getPassword()));
 
             Properties config = new Properties();
             config.put("StrictHostKeyChecking", "no");

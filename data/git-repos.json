@@ -1,9 +1,9 @@
 [ {
-  "name" : "main",
+  "name" : "test",
   "repoUrl" : "https://github.com/PipBari/diplom_configs.git",
   "branch" : "master",
   "username" : "PipBari",
-  "token" : "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",
+  "token" : "TI3JWECI8OSc6TgK+6CZ8gzFYJ9marnxHbQHo4iI28vieJn5sk8e1c4mhX3jQiLL",
   "type" : "git",
   "status" : "Successful"
 } ]

@@ -9,9 +9,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import ru.backend.rest.settings.dto.ServersDto;
+import ru.backend.util.EncryptionUtils;
 
 import java.io.File;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Scanner;
@@ -26,9 +28,7 @@ public class ServersService {
 
     public ServersService(@Value("${storage.base-dir}") String baseDirPath) {
         File baseDir = new File(resolvePath(baseDirPath));
-        if (!baseDir.exists()) {
-            baseDir.mkdirs();
-        }
+        if (!baseDir.exists()) baseDir.mkdirs();
         this.storageFile = new File(baseDir, "servers.json");
     }
 
@@ -67,6 +67,7 @@ public class ServersService {
     }
 
     public void save(ServersDto server) {
+        encryptPassword(server);
         server.setStatus(checkConnection(server));
         serverStorage.put(server.getName(), server);
         updateServerLoad(server.getName());
@@ -87,7 +88,9 @@ public class ServersService {
         if (updated.getHost() != null) existing.setHost(updated.getHost());
         if (updated.getSpecify_username() != null) existing.setSpecify_username(updated.getSpecify_username());
         if (updated.getPort() != 0) existing.setPort(updated.getPort());
-        if (updated.getPassword() != null) existing.setPassword(updated.getPassword());
+        if (updated.getPassword() != null) {
+            existing.setPassword(EncryptionUtils.encrypt(updated.getPassword()));
+        }
 
         existing.setStatus(checkConnection(existing));
         updateServerLoad(existing.getName());
@@ -113,9 +116,9 @@ public class ServersService {
         try {
             JSch jsch = new JSch();
             Session session = jsch.getSession(server.getSpecify_username(), server.getHost(), server.getPort());
-            session.setPassword(server.getPassword());
+            session.setPassword(decryptPassword(server));
 
-            java.util.Properties config = new java.util.Properties();
+            Properties config = new Properties();
             config.put("StrictHostKeyChecking", "no");
             session.setConfig(config);
 
@@ -128,7 +131,6 @@ public class ServersService {
             server.setRAM(parseMemory(memoryInfo));
 
             session.disconnect();
-
             saveToDisk();
         } catch (Exception e) {
             server.setCPU("-");
@@ -141,9 +143,9 @@ public class ServersService {
         try {
             JSch jsch = new JSch();
             Session session = jsch.getSession(server.getSpecify_username(), server.getHost(), server.getPort());
-            session.setPassword(server.getPassword());
+            session.setPassword(decryptPassword(server));
 
-            java.util.Properties config = new java.util.Properties();
+            Properties config = new Properties();
             config.put("StrictHostKeyChecking", "no");
             session.setConfig(config);
 
@@ -181,5 +183,20 @@ public class ServersService {
             return used + " МБ / " + total + " МБ";
         }
         return "Unknown";
+    }
+
+    private void encryptPassword(ServersDto server) {
+        if (server.getPassword() != null && !server.getPassword().isBlank()) {
+            server.setPassword(EncryptionUtils.encrypt(server.getPassword()));
+        }
+    }
+
+    private String decryptPassword(ServersDto server) {
+        try {
+            return EncryptionUtils.decrypt(server.getPassword());
+        } catch (Exception e) {
+            log.warn("Ошибка расшифровки пароля для сервера '{}': {}", server.getName(), e.getMessage());
+            return "";
+        }
     }
 }

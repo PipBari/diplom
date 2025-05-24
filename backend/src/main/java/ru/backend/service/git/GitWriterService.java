@@ -7,32 +7,35 @@ import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.springframework.stereotype.Service;
-import ru.backend.rest.git.dto.FileNodeDto;
-import ru.backend.rest.git.dto.GitCommitDto;
-import ru.backend.rest.git.dto.GitConnectionRequestDto;
-import ru.backend.rest.git.dto.GitFileSaveRequest;
+import ru.backend.rest.git.dto.*;
 import ru.backend.rest.validation.dto.ValidationRequestDto;
 import ru.backend.rest.validation.dto.ValidationResultDto;
 import ru.backend.service.validation.TemplateValidationService;
+import ru.backend.util.EncryptionUtils;
 
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
 @Slf4j
 @Service
 public class GitWriterService {
 
+    private UsernamePasswordCredentialsProvider getCredentials(GitConnectionRequestDto repo) {
+        String decryptedToken = repo.getToken() != null && !repo.getToken().isBlank()
+                ? EncryptionUtils.decrypt(repo.getToken())
+                : "";
+        return new UsernamePasswordCredentialsProvider(repo.getUsername(), decryptedToken);
+    }
+
     public boolean branchExists(GitConnectionRequestDto repo, String branch) {
         try {
             return Git.lsRemoteRepository()
                     .setRemote(repo.getRepoUrl())
-                    .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                    .setCredentialsProvider(getCredentials(repo))
                     .call()
                     .stream()
                     .anyMatch(ref -> ref.getName().endsWith("/" + branch));
@@ -54,7 +57,7 @@ public class GitWriterService {
                     .setBranch(branch)
                     .setDirectory(tempDir)
                     .setNoCheckout(false)
-                    .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                    .setCredentialsProvider(getCredentials(repo))
                     .call();
 
             File targetPath = new File(tempDir, path);
@@ -78,7 +81,7 @@ public class GitWriterService {
                     .setURI(repo.getRepoUrl())
                     .setBranch(branch)
                     .setDirectory(tempDir)
-                    .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                    .setCredentialsProvider(getCredentials(repo))
                     .call();
 
             File target = new File(tempDir, path);
@@ -110,7 +113,7 @@ public class GitWriterService {
                     .setURI(repo.getRepoUrl())
                     .setBranch(branch)
                     .setDirectory(tempDir)
-                    .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                    .setCredentialsProvider(getCredentials(repo))
                     .call();
 
             File dir = new File(tempDir, basePath);
@@ -135,7 +138,7 @@ public class GitWriterService {
                     .setURI(repo.getRepoUrl())
                     .setBranch(branch)
                     .setDirectory(tempDir)
-                    .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                    .setCredentialsProvider(getCredentials(repo))
                     .call();
 
             File dir = new File(tempDir, basePath);
@@ -161,19 +164,9 @@ public class GitWriterService {
 
         for (File file : files) {
             if (file.isDirectory()) {
-                children.add(new FileNodeDto(
-                        file.getName(),
-                        "folder",
-                        null,
-                        readChildrenRecursive(file)
-                ));
+                children.add(new FileNodeDto(file.getName(), "folder", null, readChildrenRecursive(file)));
             } else {
-                children.add(new FileNodeDto(
-                        file.getName(),
-                        "file",
-                        null,
-                        new ArrayList<>()
-                ));
+                children.add(new FileNodeDto(file.getName(), "file", null, new ArrayList<>()));
             }
         }
         return children;
@@ -188,7 +181,7 @@ public class GitWriterService {
                     .setURI(repo.getRepoUrl())
                     .setBranch(branch)
                     .setDirectory(tempDir)
-                    .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                    .setCredentialsProvider(getCredentials(repo))
                     .call();
 
             Iterable<RevCommit> logs = git.log()
@@ -208,9 +201,7 @@ public class GitWriterService {
         } catch (Exception e) {
             log.error("Ошибка при получении коммитов: {}", e.getMessage());
         } finally {
-            if (tempDir != null) {
-                System.out.println("Временная папка не удалена (log): " + tempDir.getAbsolutePath());
-            }
+            if (tempDir != null) deleteDirectory(tempDir);
         }
 
         return result;
@@ -222,7 +213,7 @@ public class GitWriterService {
                 .setURI(repo.getRepoUrl())
                 .setBranch(branch)
                 .setDirectory(tempDir)
-                .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                .setCredentialsProvider(getCredentials(repo))
                 .call()) {
 
             File dir = new File(tempDir, folderPath);
@@ -235,7 +226,7 @@ public class GitWriterService {
 
             git.add().addFilepattern(".").call();
             git.commit().setMessage(commitMessage).call();
-            git.push().setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken())).call();
+            git.push().setCredentialsProvider(getCredentials(repo)).call();
 
         } finally {
             deleteDirectory(tempDir);
@@ -244,12 +235,11 @@ public class GitWriterService {
 
     public void createFolder(GitConnectionRequestDto repo, String branch, String folderPath, String commitMessage) throws IOException, GitAPIException {
         File tempDir = Files.createTempDirectory("repo-folder").toFile();
-
         try (Git git = Git.cloneRepository()
                 .setURI(repo.getRepoUrl())
                 .setBranch(branch)
                 .setDirectory(tempDir)
-                .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                .setCredentialsProvider(getCredentials(repo))
                 .call()) {
 
             File newFolder = new File(tempDir, folderPath);
@@ -262,7 +252,7 @@ public class GitWriterService {
 
             git.add().addFilepattern(".").call();
             git.commit().setMessage(commitMessage).call();
-            git.push().setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken())).call();
+            git.push().setCredentialsProvider(getCredentials(repo)).call();
 
         } finally {
             deleteDirectory(tempDir);
@@ -271,12 +261,11 @@ public class GitWriterService {
 
     public void deletePath(GitConnectionRequestDto repo, String branch, String path, String commitMessage) throws IOException, GitAPIException {
         File tempDir = Files.createTempDirectory("repo-delete").toFile();
-
         try (Git git = Git.cloneRepository()
                 .setURI(repo.getRepoUrl())
                 .setBranch(branch)
                 .setDirectory(tempDir)
-                .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                .setCredentialsProvider(getCredentials(repo))
                 .call()) {
 
             File target = new File(tempDir, path);
@@ -288,30 +277,20 @@ public class GitWriterService {
 
             git.rm().addFilepattern(path).call();
             git.commit().setMessage(commitMessage).call();
-            git.push().setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken())).call();
+            git.push().setCredentialsProvider(getCredentials(repo)).call();
 
         } finally {
             deleteDirectory(tempDir);
         }
     }
 
-    private void deleteDirectory(File dir) {
-        if (dir == null || !dir.exists()) return;
-        File[] files = dir.listFiles();
-        if (files != null) {
-            for (File f : files) deleteDirectory(f);
-        }
-        dir.delete();
-    }
-
     public void renamePath(GitConnectionRequestDto repo, String branch, String oldPath, String newPath, String commitMessage) throws IOException, GitAPIException {
         File tempDir = Files.createTempDirectory("repo-rename").toFile();
-
         try (Git git = Git.cloneRepository()
                 .setURI(repo.getRepoUrl())
                 .setBranch(branch)
                 .setDirectory(tempDir)
-                .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                .setCredentialsProvider(getCredentials(repo))
                 .call()) {
 
             File oldFile = new File(tempDir, oldPath);
@@ -328,7 +307,7 @@ public class GitWriterService {
             git.rm().addFilepattern(oldPath).call();
             git.add().addFilepattern(newPath).call();
             git.commit().setMessage(commitMessage).call();
-            git.push().setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken())).call();
+            git.push().setCredentialsProvider(getCredentials(repo)).call();
 
         } finally {
             deleteDirectory(tempDir);
@@ -337,12 +316,11 @@ public class GitWriterService {
 
     public void revertCommit(GitConnectionRequestDto repo, String branch, String commitHash, String commitMessage) throws IOException, GitAPIException {
         File tempDir = Files.createTempDirectory("repo-revert").toFile();
-
         try (Git git = Git.cloneRepository()
                 .setURI(repo.getRepoUrl())
                 .setBranch(branch)
                 .setDirectory(tempDir)
-                .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                .setCredentialsProvider(getCredentials(repo))
                 .call()) {
 
             ObjectId commitId = git.getRepository().resolve(commitHash);
@@ -351,56 +329,33 @@ public class GitWriterService {
                     .call();
 
             git.commit().setMessage(commitMessage).call();
-            git.push()
-                    .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
-                    .call();
+            git.push().setCredentialsProvider(getCredentials(repo)).call();
 
         } finally {
             deleteDirectory(tempDir);
         }
     }
 
-    public ValidationResultDto saveFileWithValidation(
-            GitConnectionRequestDto repo,
-            String branch,
-            GitFileSaveRequest request,
-            TemplateValidationService validationService
-    ) throws IOException, GitAPIException {
-
+    public ValidationResultDto saveFileWithValidation(GitConnectionRequestDto repo, String branch, GitFileSaveRequest request, TemplateValidationService validationService) throws IOException, GitAPIException {
         String fullPath = request.getPath();
         String filename = fullPath.contains("/") ? fullPath.substring(fullPath.lastIndexOf('/') + 1) : fullPath;
         String folderPath = fullPath.contains("/") ? fullPath.substring(0, fullPath.lastIndexOf('/')) : "";
 
         String type = null;
-        if (filename.endsWith(".tf")) {
-            type = "terraform";
-        } else if (filename.endsWith(".yml") || filename.endsWith(".yaml")) {
-            type = "ansible";
-        } else if (filename.endsWith(".sh")) {
-            type = "bash";
-        }
+        if (filename.endsWith(".tf")) type = "terraform";
+        else if (filename.endsWith(".yml") || filename.endsWith(".yaml")) type = "ansible";
+        else if (filename.endsWith(".sh")) type = "bash";
+
         if (type != null && request.getAllFiles() != null) {
             List<ValidationRequestDto> allFiles = new ArrayList<>(request.getAllFiles());
             allFiles.removeIf(f -> f.getFilename().equals(fullPath));
-            allFiles.add(new ValidationRequestDto(
-                    fullPath,
-                    request.getContent(),
-                    request.getServerName()
-            ));
-            ValidationResultDto result = validationService.validate(type, allFiles);
-            if (!result.isValid()) {
-                return result;
-            }
-        }
-        this.pushFile(
-                repo,
-                branch,
-                folderPath,
-                filename,
-                request.getContent(),
-                request.getCommitMessage()
-        );
+            allFiles.add(new ValidationRequestDto(fullPath, request.getContent(), request.getServerName()));
 
+            ValidationResultDto result = validationService.validate(type, allFiles);
+            if (!result.isValid()) return result;
+        }
+
+        this.pushFile(repo, branch, folderPath, filename, request.getContent(), request.getCommitMessage());
         return new ValidationResultDto(true, "Файл сохранён в Git");
     }
 
@@ -410,7 +365,7 @@ public class GitWriterService {
                 .setURI(repo.getRepoUrl())
                 .setBranch(branch)
                 .setDirectory(tempDir)
-                .setCredentialsProvider(new UsernamePasswordCredentialsProvider(repo.getUsername(), repo.getToken()))
+                .setCredentialsProvider(getCredentials(repo))
                 .call()) {
 
             File targetFile = new File(tempDir, path);
@@ -423,5 +378,14 @@ public class GitWriterService {
         } finally {
             deleteDirectory(tempDir);
         }
+    }
+
+    private void deleteDirectory(File dir) {
+        if (dir == null || !dir.exists()) return;
+        File[] files = dir.listFiles();
+        if (files != null) {
+            for (File f : files) deleteDirectory(f);
+        }
+        dir.delete();
     }
 }

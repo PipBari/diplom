@@ -11,6 +11,7 @@ import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import ru.backend.rest.git.dto.GitConnectionRequestDto;
+import ru.backend.util.EncryptionUtils;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -69,11 +70,17 @@ public class GitService {
     }
 
     public void save(GitConnectionRequestDto request) {
+        if (request.getToken() != null && !request.getToken().isBlank()) {
+            request.setToken(EncryptionUtils.encrypt(request.getToken()));
+        }
+
         String status = checkConnection(request);
         request.setStatus(status);
+
         if (request.getType() == null || request.getType().isBlank()) {
             request.setType("git");
         }
+
         repoStorage.put(request.getName(), request);
         saveToDisk();
     }
@@ -97,13 +104,17 @@ public class GitService {
     private String checkConnection(GitConnectionRequestDto request) {
         try {
             var tempDir = Files.createTempDirectory("git-check").toFile();
+            String decryptedToken = request.getToken() != null && !request.getToken().isBlank()
+                    ? EncryptionUtils.decrypt(request.getToken())
+                    : "";
+
             CloneCommand cloneCommand = Git.cloneRepository()
                     .setURI(request.getRepoUrl())
                     .setBranch(request.getBranch())
                     .setDirectory(tempDir)
                     .setCredentialsProvider(new UsernamePasswordCredentialsProvider(
                             request.getUsername(),
-                            request.getToken()
+                            decryptedToken
                     ))
                     .setCloneAllBranches(false)
                     .setNoCheckout(true);
@@ -133,7 +144,9 @@ public class GitService {
         if (updated.getRepoUrl() != null) existing.setRepoUrl(updated.getRepoUrl());
         if (updated.getBranch() != null) existing.setBranch(updated.getBranch());
         if (updated.getUsername() != null) existing.setUsername(updated.getUsername());
-        if (updated.getToken() != null) existing.setToken(updated.getToken());
+        if (updated.getToken() != null) {
+            existing.setToken(EncryptionUtils.encrypt(updated.getToken()));
+        }
         if (updated.getType() != null) existing.setType(updated.getType());
 
         String status = checkConnection(existing);

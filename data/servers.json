@@ -3,8 +3,8 @@
   "host" : "147.45.149.212",
   "specify_username" : "root",
   "port" : 22,
-  "password" : "bXyvNC2-F?_ULY",
-  "status" : "Error",
-  "ram" : "-",
-  "cpu" : "-"
+  "password" : "M6tM/W9Y24XVpgdk+bqTOw==",
+  "status" : "Successful",
+  "cpu" : "6.7%",
+  "ram" : "241 МБ / 957 МБ"
 } ]
