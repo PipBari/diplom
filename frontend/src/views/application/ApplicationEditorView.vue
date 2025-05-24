@@ -124,6 +124,7 @@
               <div class="commit-text">
                 <b>{{ formatDate(c.date) }}</b> — {{ c.author }}: {{ c.message }}
               </div>
+              <button @click="previewRevert(c)">Предпросмотр</button>
               <button class="revert-button" @click="confirmRevert(c)">↩️</button>
             </div>
           </li>
@@ -216,6 +217,26 @@
       </div>
     </div>
 
+    <div v-if="showPreviewModal" class="overlay" @click.self="showPreviewModal = false">
+      <div class="dialog preview-dialog">
+        <h3>Изменения в коммите</h3>
+        <p><strong>{{ previewCommit?.message }}</strong> — {{ previewCommit?.author }}</p>
+        <div class="diff-list">
+          <div
+              v-for="(line, index) in formattedDiff"
+              :key="index"
+              :class="getDiffLineClass(line)"
+              class="diff-line"
+          >
+            {{ line }}
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button @click="showPreviewModal = false">Закрыть</button>
+        </div>
+      </div>
+    </div>
+
     <div class="toast-container">
       <div v-for="(toast, index) in toasts" :key="index" class="toast" :class="toast.type">
         {{ toast.message }}
@@ -243,6 +264,10 @@ const commitsPerPage = 5
 
 const openTabs = ref([])
 const activeTab = ref(null)
+
+const showPreviewModal = ref(false)
+const previewCommit = ref(null)
+const commitDiff = ref('')
 
 const route = useRoute()
 const app = ref({})
@@ -1092,6 +1117,35 @@ const closeTab = (path) => {
       }
     }
   }
+}
+
+const previewRevert = async (commit) => {
+  previewCommit.value = commit
+  showPreviewModal.value = true
+  commitDiff.value = 'Загрузка...'
+
+  try {
+    const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/diff`, {
+      params: {
+        commitHash: commit.hash,
+        path: currentFileName.value
+      }
+    })
+    commitDiff.value = res.data || 'Нет изменений'
+  } catch (e) {
+    commitDiff.value = e.response?.data || 'Ошибка при получении diff'
+  }
+}
+
+const formattedDiff = computed(() =>
+    commitDiff.value.split('\n')
+)
+
+const getDiffLineClass = (line) => {
+  if (line.startsWith('+') && !line.startsWith('+++')) return 'diff-added'
+  if (line.startsWith('-') && !line.startsWith('---')) return 'diff-removed'
+  if (line.startsWith('@@')) return 'diff-hunk'
+  return 'diff-neutral'
 }
 
 </script>

@@ -431,3 +431,49 @@
 .close-btn:hover {
     color: #000;
 }
+
+.diff-preview {
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+    max-height: 400px;
+    overflow: auto;
+    font-family: monospace;
+    padding: 1rem;
+    white-space: pre-wrap;
+    border-radius: 8px;
+}
+
+.diff-list {
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+    font-size: 13px;
+    padding: 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+    white-space: pre;
+    max-height: 500px;
+    line-height: 1.5;
+    text-align: left;
+}
+
+.diff-line {
+    white-space: pre-wrap;
+    padding: 0 8px;
+}
+
+.diff-added {
+    background-color: #e6ffed;
+    color: #22863a;
+}
+
+.diff-removed {
+    background-color: #ffeef0;
+    color: #b31d28;
+}
+
+.diff-hunk {
+    background-color: #f1f8ff;
+    color: #0366d6;
+    font-weight: bold;
+}

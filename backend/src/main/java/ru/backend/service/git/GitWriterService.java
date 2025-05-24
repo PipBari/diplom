@@ -4,10 +4,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.ListBranchCommand;
 import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.diff.DiffEntry;
+import org.eclipse.jgit.diff.DiffFormatter;
 import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.lib.ObjectReader;
+import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.transport.RefSpec;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
+import org.eclipse.jgit.treewalk.AbstractTreeIterator;
+import org.eclipse.jgit.treewalk.CanonicalTreeParser;
+import org.eclipse.jgit.treewalk.EmptyTreeIterator;
+import org.eclipse.jgit.treewalk.filter.PathFilter;
 import org.springframework.stereotype.Service;
 import ru.backend.rest.git.dto.*;
 import ru.backend.rest.validation.dto.ValidationRequestDto;
@@ -15,6 +23,7 @@ import ru.backend.rest.validation.dto.ValidationResultDto;
 import ru.backend.service.validation.TemplateValidationService;
 import ru.backend.util.EncryptionUtils;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -506,6 +515,62 @@ public class GitWriterService {
             throw new RuntimeException("Ошибка при откате последнего коммита: " + e.getMessage(), e);
         } finally {
             if (tempDir != null) deleteDirectory(tempDir);
+        }
+    }
+
+    public String getCommitDiff(GitConnectionRequestDto repo, String branch, String commitHash, String path) throws Exception {
+        File tempDir = Files.createTempDirectory("repo-diff").toFile();
+        try (Git git = Git.cloneRepository()
+                .setURI(repo.getRepoUrl())
+                .setBranch(branch)
+                .setDirectory(tempDir)
+                .setCredentialsProvider(getCredentials(repo))
+                .call()) {
+
+            Repository repository = git.getRepository();
+            ObjectReader reader = repository.newObjectReader();
+
+            ObjectId commitId = repository.resolve(commitHash);
+            if (commitId == null) {
+                return "Коммит не найден: " + commitHash;
+            }
+
+            RevCommit commit = repository.parseCommit(commitId);
+            CanonicalTreeParser newTreeParser = new CanonicalTreeParser();
+            newTreeParser.reset(reader, commit.getTree());
+
+            AbstractTreeIterator oldTreeParser;
+
+            if (commit.getParentCount() > 0) {
+                RevCommit parent = commit.getParent(0);
+                parent = repository.parseCommit(parent.getId());
+
+                CanonicalTreeParser oldTree = new CanonicalTreeParser();
+                oldTree.reset(reader, parent.getTree());
+                oldTreeParser = oldTree;
+            } else {
+                oldTreeParser = new EmptyTreeIterator();
+            }
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            try (DiffFormatter diffFormatter = new DiffFormatter(out)) {
+                diffFormatter.setRepository(repository);
+                diffFormatter.setPathFilter(PathFilter.create(path));
+                List<DiffEntry> entries = diffFormatter.scan(oldTreeParser, newTreeParser);
+
+                if (entries.isEmpty()) {
+                    return "";
+                }
+
+                for (DiffEntry entry : entries) {
+                    diffFormatter.format(entry);
+                }
+
+                return out.toString(StandardCharsets.UTF_8);
+            }
+
+        } finally {
+            deleteDirectory(tempDir);
         }
     }
 }

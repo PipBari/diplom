@@ -204,4 +204,21 @@ public class GitWriterController {
             return ResponseEntity.status(500).body("Ошибка при откате: " + e.getMessage());
         }
     }
+
+    @GetMapping("/{name}/branch/{branch}/diff")
+    public ResponseEntity<?> getCommitDiff(
+            @PathVariable String name,
+            @PathVariable String branch,
+            @RequestParam String commitHash,
+            @RequestParam String path) {
+        try {
+            GitConnectionRequestDto repo = gitService.getByName(name);
+            String diff = gitWriterService.getCommitDiff(repo, branch, commitHash, path);
+            return ResponseEntity.ok(diff);
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body(Map.of("error", "Репозиторий не найден: " + e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Ошибка при получении diff: " + e.getMessage()));
+        }
+    }
 }
