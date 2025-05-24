@@ -1,5 +1,5 @@
 [ {
-  "name" : "configs",
+  "name" : "main",
   "repoUrl" : "https://github.com/PipBari/diplom_configs.git",
   "branch" : "master",
   "username" : "PipBari",

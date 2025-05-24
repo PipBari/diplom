@@ -3,8 +3,9 @@
       class="file-node"
       :style="{ paddingLeft: `${depth * 16}px` }"
       @contextmenu.prevent="onRightClick"
+      :class="{ 'drag-over': isDragOver }"
   >
-    <div class="node-label" @click="toggle">
+    <div class="node-label" :draggable="true" @dragstart="handleDragStart" @dragover.prevent="handleDragOver" @dragleave="handleDragLeave" @drop="handleDrop" @dragend="handleDragEnd" @click="toggle">
       <span class="arrow" v-if="node.type === 'folder'">
         {{ isOpen ? '▼' : '▶' }}
       </span>
@@ -33,6 +34,7 @@
           :depth="depth + 1"
           @open-file="$emit('open-file', $event)"
           @context-menu="$emit('context-menu', $event, child)"
+          @move-node="$emit('move-node', $event)"
       />
     </div>
   </div>
@@ -47,9 +49,10 @@ const props = defineProps({
   depth: { type: Number, default: 0 }
 })
 
-const emit = defineEmits(['open-file', 'context-menu'])
+const emit = defineEmits(['open-file', 'context-menu', 'move-node'])
 
 const isOpen = ref(false)
+const isDragOver = ref(false)
 
 const toggle = () => {
   if (props.node.type === 'folder') {
@@ -64,6 +67,43 @@ const onRightClick = (event) => {
   emit('context-menu', event, props.node)
 }
 
+const handleDragStart = (e) => {
+  e.dataTransfer.setData('application/json', JSON.stringify(props.node))
+}
+
+const handleDragOver = () => {
+  isDragOver.value = true
+}
+
+const handleDragLeave = () => {
+  isDragOver.value = false
+}
+
+const handleDrop = (e) => {
+  isDragOver.value = false
+
+  let sourceNode
+  try {
+    sourceNode = JSON.parse(e.dataTransfer.getData('application/json'))
+  } catch {
+    return
+  }
+
+  const targetNode = props.node
+
+  if (targetNode.type !== 'folder') return
+  if (sourceNode.fullPath === targetNode.fullPath) return
+  if (sourceNode.fullPath.startsWith(`${targetNode.fullPath}/`)) return
+
+  emit('move-node', {
+    source: sourceNode,
+    targetFolder: targetNode
+  })
+}
+
+const handleDragEnd = () => {
+  isDragOver.value = false
+}
 </script>
 
 <style scoped>
@@ -119,5 +159,9 @@ const onRightClick = (event) => {
   margin-left: 12px;
   border-left: 1px solid #ddd;
   padding-left: 4px;
+}
+
+.drag-over > .node-label {
+  background: #d0ebff;
 }
 </style>

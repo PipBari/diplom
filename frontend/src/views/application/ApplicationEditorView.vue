@@ -1,7 +1,7 @@
 <template>
   <div class="editor-layout">
-    <div class="file-tree" @contextmenu.prevent="showContextMenu($event, null)">
-    <FileTreeNode
+    <div class="file-tree" @contextmenu.prevent="showContextMenu($event, null)" @dragover.prevent="onRootDragOver" @dragleave="onRootDragLeave" @drop="onRootDrop" :class="{ 'drag-over': isRootDragOver }">
+      <FileTreeNode
           v-for="child in rootEntry?.children || []"
           :key="child.fullPath"
           :node="child"
@@ -9,6 +9,7 @@
           :depth="0"
           @open-file="loadEntry"
           @context-menu="(event, node) => showContextMenu(event, node)"
+          @move-node="handleMoveNode"
       />
     </div>
 
@@ -541,4 +542,104 @@ const deletePath = async () => {
   await refreshTree()
   addToast('Удалено', 'success')
 }
+
+const handleMoveNode = async ({ source, targetFolder }) => {
+  if (!source || !targetFolder || targetFolder.type !== 'folder') {
+    addToast('Неверная папка перемещения', 'error')
+    return
+  }
+
+  const name = source.fullPath.split('/').pop()
+  const newPath = `${targetFolder.fullPath}/${name}`.replace(/\/+/g, '/')
+  const currentParent = source.fullPath.split('/').slice(0, -1).join('/')
+
+  if (source.fullPath === newPath || currentParent === targetFolder.fullPath) {
+    addToast(`Элемент уже находится в папке "${targetFolder.fullPath}"`, 'info')
+    return
+  }
+
+  try {
+    await api.put(`/git/writer/${repo.value.name}/branch/${app.value.branch}/rename`, {
+      oldPath: source.fullPath,
+      newPath,
+      commitMessage: `Перемещение ${source.name} в ${targetFolder.fullPath}`
+    })
+
+    addToast(`Перемещено в папку: ${targetFolder.fullPath}`, 'success')
+    await refreshTree()
+  } catch (e) {
+    addToast(e.response?.data?.message || 'Ошибка при перемещении', 'error')
+  }
+}
+
+const isRootDragOver = ref(false)
+
+const onRootDragOver = () => {
+  isRootDragOver.value = true
+}
+
+const onRootDragLeave = () => {
+  isRootDragOver.value = false
+}
+
+const findNodeByPath = (entry, targetPath) => {
+  if (!entry) return null
+  if (entry.fullPath === targetPath) return entry
+  if (!entry.children) return null
+
+  for (const child of entry.children) {
+    const result = findNodeByPath(child, targetPath)
+    if (result) return result
+  }
+
+  return null
+}
+
+const onRootDrop = async (e) => {
+  isRootDragOver.value = false
+
+  const raw = e.dataTransfer.getData('application/json')
+  if (!raw) {
+    addToast('Не удалось получить данные элемента', 'error')
+    return
+  }
+
+  let sourceNode
+  try {
+    sourceNode = JSON.parse(raw)
+  } catch {
+    addToast('Невалидные данные элемента', 'error')
+    return
+  }
+
+  const sourcePath = sourceNode.fullPath
+  const name = sourcePath.split('/').pop()
+  const targetFolder = app.value.path
+  const newPath = `${targetFolder}/${name}`.replace(/\/+/g, '/')
+
+  if (sourcePath === newPath) {
+    addToast(`Элемент уже находится в папке "${targetFolder}"`, 'info')
+    return
+  }
+
+  const currentParent = sourcePath.split('/').slice(0, -1).join('/')
+  if (currentParent === targetFolder) {
+    addToast(`Элемент уже находится в папке "${targetFolder}"`, 'info')
+    return
+  }
+
+  try {
+    await api.put(`/git/writer/${repo.value.name}/branch/${app.value.branch}/rename`, {
+      oldPath: sourcePath,
+      newPath,
+      commitMessage: `Перемещение ${name} в ${targetFolder}`
+    })
+
+    addToast(`Перемещено в папку: ${targetFolder}`, 'success')
+    await refreshTree()
+  } catch (err) {
+    addToast(err.response?.data?.message || 'Ошибка при перемещении', 'error')
+  }
+}
+
 </script>

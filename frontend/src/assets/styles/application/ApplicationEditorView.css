@@ -302,3 +302,7 @@
     color: #999;
     margin: 0 4px;
 }
+
+.file-tree.drag-over {
+    background: #d0ebff;
+}
