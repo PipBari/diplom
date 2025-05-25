@@ -282,7 +282,9 @@ const route = useRoute()
 const app = ref({})
 const repo = ref({})
 const rootEntry = ref(null)
+const allCommits = ref([])
 const commits = ref([])
+const totalCommits = ref(0)
 const serverInfo = ref(null)
 
 const monaco = ref(null)
@@ -554,12 +556,28 @@ const loadEntry = async (path) => {
 
 const loadCommits = async (path) => {
   try {
+    const offset = (currentPage.value - 1) * commitsPerPage
+
     const res = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/commits`, {
-      params: { path, limit: 5 }
+      params: {
+        path,
+        offset,
+        limit: commitsPerPage
+      }
     })
     commits.value = res.data
-  } catch {
+
+    if (currentPage.value === 1) {
+      const allRes = await api.get(`/git/writer/${repo.value.name}/branch/${app.value.branch}/commits`, {
+        params: { path, offset: 0, limit: 99999 }
+      })
+      totalCommits.value = allRes.data.length
+    }
+
+  } catch (e) {
     commits.value = []
+    totalCommits.value = 0
+    addToast('Ошибка при загрузке коммитов', 'error')
   }
 }
 
@@ -1084,20 +1102,22 @@ const confirmRevert = async (commit) => {
 }
 
 const totalPages = computed(() =>
-    Math.ceil(filteredCommitsByDate.value.length / commitsPerPage)
+    Math.ceil(totalCommits.value / commitsPerPage)
 )
 
-const paginatedCommits = computed(() => {
-  const start = (currentPage.value - 1) * commitsPerPage
-  return filteredCommitsByDate.value.slice(start, start + commitsPerPage)
-})
+const paginatedCommits = computed(() => filteredCommitsByDate.value)
 
-const nextPage = () => {
-  if (currentPage.value < totalPages.value) currentPage.value++
+const nextPage = async () => {
+  if (currentPage.value < totalPages.value) {
+    currentPage.value++
+    await loadCommits(currentFileName.value)
+  }
 }
-
-const prevPage = () => {
-  if (currentPage.value > 1) currentPage.value--
+const prevPage = async () => {
+  if (currentPage.value > 1) {
+    currentPage.value--
+    await loadCommits(currentFileName.value)
+  }
 }
 
 const switchTab = async (path) => {

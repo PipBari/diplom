@@ -30,6 +30,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.stream.StreamSupport;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -274,8 +275,8 @@ public class GitWriterService {
         return children;
     }
 
-    public List<GitCommitDto> getRecentCommits(GitConnectionRequestDto repo, String branch, String path, int limit) {
-        List<GitCommitDto> result = new ArrayList<>();
+    public List<GitCommitDto> getRecentCommits(GitConnectionRequestDto repo, String branch, String path, int offset, int limit) {
+        List<GitCommitDto> allCommits = new ArrayList<>();
         File tempDir = null;
         try {
             tempDir = Files.createTempDirectory("repo-log").toFile();
@@ -286,19 +287,16 @@ public class GitWriterService {
                     .setCredentialsProvider(getCredentials(repo))
                     .call();
 
-            Iterable<RevCommit> logs = git.log()
-                    .addPath(path)
-                    .setMaxCount(limit)
-                    .call();
+            Iterable<RevCommit> logs = git.log().addPath(path).call();
 
-            for (RevCommit commit : logs) {
-                result.add(new GitCommitDto(
-                        commit.getAuthorIdent().getName(),
-                        commit.getShortMessage(),
-                        commit.getAuthorIdent().getWhen().toString(),
-                        commit.getName()
-                ));
-            }
+            allCommits = StreamSupport.stream(logs.spliterator(), false)
+                    .map(commit -> new GitCommitDto(
+                            commit.getAuthorIdent().getName(),
+                            commit.getShortMessage(),
+                            commit.getAuthorIdent().getWhen().toString(),
+                            commit.getName()
+                    ))
+                    .toList();
 
         } catch (Exception e) {
             log.error("Ошибка при получении коммитов: {}", e.getMessage());
@@ -306,7 +304,10 @@ public class GitWriterService {
             if (tempDir != null) deleteDirectory(tempDir);
         }
 
-        return result;
+        return allCommits.stream()
+                .skip(offset)
+                .limit(limit)
+                .toList();
     }
 
     public void pushFile(GitConnectionRequestDto repo, String branch, String folderPath, String filename, String content, String commitMessage) throws IOException, GitAPIException {

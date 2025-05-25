@@ -146,9 +146,13 @@ public class GitWriterController {
     }
 
     @GetMapping("/{name}/branch/{branch}/commits")
-    public ResponseEntity<?> getCommits(@PathVariable String name, @PathVariable String branch, @RequestParam String path, @RequestParam(defaultValue = "5") int limit) {
+    public ResponseEntity<?> getCommits(@PathVariable String name, @PathVariable String branch, @RequestParam String path, @RequestParam(defaultValue = "0") int offset, @RequestParam(defaultValue = "5") int limit) {
         try {
-            return ResponseEntity.ok(gitWriterService.getRecentCommits(gitService.getByName(name), branch, path, limit));
+            return ResponseEntity.ok(
+                    gitWriterService.getRecentCommits(
+                            gitService.getByName(name), branch, path, offset, limit
+                    )
+            );
         } catch (NoSuchElementException e) {
             return ResponseEntity.status(404).body("Репозиторий не найден: " + e.getMessage());
         } catch (Exception e) {
