@@ -30,6 +30,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 @Slf4j
 @Service
@@ -571,6 +573,39 @@ public class GitWriterService {
 
         } finally {
             deleteDirectory(tempDir);
+        }
+    }
+
+    public byte[] downloadArchive(GitConnectionRequestDto repo, String branch) throws IOException, GitAPIException {
+        File tempDir = Files.createTempDirectory("repo-archive").toFile();
+        try (Git git = Git.cloneRepository()
+                .setURI(repo.getRepoUrl())
+                .setBranch(branch)
+                .setDirectory(tempDir)
+                .setCredentialsProvider(getCredentials(repo))
+                .call()) {
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            try (ZipOutputStream zos = new ZipOutputStream(baos)) {
+                zipDirectory(tempDir, tempDir, zos);
+            }
+            return baos.toByteArray();
+
+        } finally {
+            deleteDirectory(tempDir);
+        }
+    }
+
+    private void zipDirectory(File rootDir, File sourceDir, ZipOutputStream zos) throws IOException {
+        for (File file : Objects.requireNonNull(sourceDir.listFiles())) {
+            String name = rootDir.toURI().relativize(file.toURI()).getPath();
+            if (file.isDirectory()) {
+                zipDirectory(rootDir, file, zos);
+            } else {
+                zos.putNextEntry(new ZipEntry(name));
+                Files.copy(file.toPath(), zos);
+                zos.closeEntry();
+            }
         }
     }
 }

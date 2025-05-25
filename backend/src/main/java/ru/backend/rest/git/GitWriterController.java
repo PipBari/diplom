@@ -14,6 +14,7 @@ import ru.backend.util.EncryptionUtils;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -219,6 +220,24 @@ public class GitWriterController {
             return ResponseEntity.status(404).body(Map.of("error", "Репозиторий не найден: " + e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", "Ошибка при получении diff: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{name}/branch/{branch}/archive")
+    public ResponseEntity<byte[]> downloadArchive(@PathVariable String name, @PathVariable String branch) {
+        try {
+            GitConnectionRequestDto repo = gitService.getByName(name);
+            byte[] zip = gitWriterService.downloadArchive(repo, branch);
+
+            return ResponseEntity.ok()
+                    .header("Content-Disposition", "attachment; filename=\"" + name + "-" + branch + ".zip\"")
+                    .header("Content-Type", "application/zip")
+                    .body(zip);
+
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body(("Репозиторий не найден: " + e.getMessage()).getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(("Ошибка при создании архива: " + e.getMessage()).getBytes(StandardCharsets.UTF_8));
         }
     }
 }

@@ -95,8 +95,17 @@
 
       <div class="editor-header">
         <span>{{ currentFileName || 'Выберите файл' }}</span>
-        <button v-if="currentFileContent !== null" @click="saveFile">Сохранить</button>
-        <button v-if="serverInfo" @click="generateGitflow">Workflows</button>
+        <div class="editor-actions">
+          <button v-if="currentFileContent !== null" @click="saveFile">Сохранить</button>
+          <button v-if="serverInfo" @click="generateGitflow">Workflows</button>
+          <button
+              v-if="repo && repo.repoUrl && currentBranch"
+              @click="downloadArchive"
+              :disabled="isDownloading"
+          >
+            Архив
+          </button>
+        </div>
       </div>
 
       <div style="width: 100%; height: 100%; min-width: 0">
@@ -1146,6 +1155,33 @@ const getDiffLineClass = (line) => {
   if (line.startsWith('-') && !line.startsWith('---')) return 'diff-removed'
   if (line.startsWith('@@')) return 'diff-hunk'
   return 'diff-neutral'
+}
+
+const isDownloading = ref(false)
+
+const downloadArchive = async () => {
+  isDownloading.value = true
+  try {
+    const res = await api.get(
+        `/git/writer/${repo.value.name}/branch/${currentBranch.value}/archive`,
+        { responseType: 'blob' }
+    )
+
+    const blob = new Blob([res.data], { type: 'application/zip' })
+    const url = URL.createObjectURL(blob)
+
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${app.value.name}-${currentBranch.value}.zip`
+    a.click()
+    URL.revokeObjectURL(url)
+
+    addToast('Архив скачан', 'success')
+  } catch (e) {
+    addToast('Ошибка при скачивании архива', 'error')
+  } finally {
+    isDownloading.value = false
+  }
 }
 
 </script>
