@@ -67,6 +67,16 @@ public class ServersService {
     }
 
     public void save(ServersDto server) {
+        if (serverStorage.containsKey(server.getName())) {
+            throw new IllegalArgumentException("Сервер с таким именем уже существует: " + server.getName());
+        }
+
+        boolean hostExists = serverStorage.values().stream()
+                .anyMatch(s -> s.getHost().equals(server.getHost()));
+        if (hostExists) {
+            throw new IllegalArgumentException("Сервер с таким хостом уже существует: " + server.getHost());
+        }
+
         encryptPassword(server);
         server.setStatus(checkConnection(server));
         serverStorage.put(server.getName(), server);
@@ -85,9 +95,23 @@ public class ServersService {
             throw new NoSuchElementException("Сервер не найден: " + name);
         }
 
-        if (updated.getHost() != null) existing.setHost(updated.getHost());
-        if (updated.getSpecify_username() != null) existing.setSpecify_username(updated.getSpecify_username());
-        if (updated.getPort() != 0) existing.setPort(updated.getPort());
+        if (updated.getHost() != null && !updated.getHost().equals(existing.getHost())) {
+            boolean hostExists = serverStorage.values().stream()
+                    .anyMatch(s -> !s.getName().equals(name) && s.getHost().equals(updated.getHost()));
+            if (hostExists) {
+                throw new IllegalArgumentException("Сервер с таким ip уже существует: " + updated.getHost());
+            }
+            existing.setHost(updated.getHost());
+        }
+
+        if (updated.getSpecify_username() != null) {
+            existing.setSpecify_username(updated.getSpecify_username());
+        }
+
+        if (updated.getPort() != 0) {
+            existing.setPort(updated.getPort());
+        }
+
         if (updated.getPassword() != null) {
             existing.setPassword(EncryptionUtils.encrypt(updated.getPassword()));
         }

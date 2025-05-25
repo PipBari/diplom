@@ -75,13 +75,19 @@ public class ApplicationService {
     }
 
     public void save(ApplicationDto app) {
+        if (applicationStorage.containsKey(app.getName())) {
+            throw new IllegalArgumentException("Приложение с таким именем уже существует: " + app.getName());
+        }
+
         if (app.getCreatedAt() == null || app.getCreatedAt().isBlank()) {
             String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
             app.setCreatedAt(now);
         }
+
         if (app.getStatus() == null) {
             app.setStatus("Not Synced");
         }
+
         applicationStorage.put(app.getName(), app);
         saveToDisk();
     }

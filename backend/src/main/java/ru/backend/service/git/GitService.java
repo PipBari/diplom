@@ -70,6 +70,16 @@ public class GitService {
     }
 
     public void save(GitConnectionRequestDto request) {
+        if (repoStorage.containsKey(request.getName())) {
+            throw new IllegalArgumentException("Репозиторий с именем '" + request.getName() + "' уже существует");
+        }
+
+        boolean repoExists = repoStorage.values().stream()
+                .anyMatch(r -> r.getRepoUrl().equals(request.getRepoUrl()));
+        if (repoExists) {
+            throw new IllegalArgumentException("Репозиторий с ссылкой '" + request.getRepoUrl() + "' уже подключен");
+        }
+
         if (request.getToken() != null && !request.getToken().isBlank()) {
             request.setToken(EncryptionUtils.encrypt(request.getToken()));
         }
@@ -141,7 +151,15 @@ public class GitService {
             throw new NoSuchElementException("Репозиторий не найден: " + name);
         }
 
-        if (updated.getRepoUrl() != null) existing.setRepoUrl(updated.getRepoUrl());
+        if (updated.getRepoUrl() != null && !updated.getRepoUrl().equals(existing.getRepoUrl())) {
+            boolean repoExists = repoStorage.values().stream()
+                    .anyMatch(r -> !r.getName().equals(name) && r.getRepoUrl().equals(updated.getRepoUrl()));
+            if (repoExists) {
+                throw new IllegalArgumentException("Репозиторий с ссылкой '" + updated.getRepoUrl() + "' уже подключен");
+            }
+            existing.setRepoUrl(updated.getRepoUrl());
+        }
+
         if (updated.getBranch() != null) existing.setBranch(updated.getBranch());
         if (updated.getUsername() != null) existing.setUsername(updated.getUsername());
         if (updated.getToken() != null) {

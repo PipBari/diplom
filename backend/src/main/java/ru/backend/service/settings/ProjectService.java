@@ -62,6 +62,9 @@ public class ProjectService {
     }
 
     public void save(ProjectDto project) {
+        if (projectStorage.containsKey(project.getName())) {
+            throw new IllegalArgumentException("Проект с именем '" + project.getName() + "' уже существует");
+        }
         projectStorage.put(project.getName(), project);
         saveToDisk();
     }
