@@ -75,9 +75,9 @@
 
       <div class="commit-header" v-if="commits.length > 0">
         <div class="commit-main-wrapper">
-          💬 {{ commits[0].message }} — {{ commits[0].author }},
+          {{ commits[0].message }} — {{ commits[0].author }},
           {{ formatDate(commits[0].date) }}
-          <button @click="showRevertModal = true">↩️ Откатить</button>
+          <button @click="showRevertModal = true">Откатить</button>
         </div>
       </div>
 
@@ -134,7 +134,9 @@
                 <b>{{ formatDate(c.date) }}</b> — {{ c.author }}: {{ c.message }}
               </div>
               <button @click="previewRevert(c)">Предпросмотр</button>
-              <button class="revert-button" @click="confirmRevert(c)">↩️</button>
+              <button class="revert-button" @click="confirmRevert(c)">
+                <img src="@/assets/icons/revert.svg" alt="revert" class="icon" />
+              </button>
             </div>
           </li>
         </ul>
@@ -156,17 +158,21 @@
         class="context-menu"
         :style="{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }"
     >
-      <div class="context-item" @click="openNewFileDialog">📄 Новый файл</div>
-      <div class="context-item" @click="openNewFolderDialog">📁 Новая папка</div>
+      <div class="context-item" @click="openNewFileDialog">
+        <img src="@/assets/icons/file.svg" alt="new file" class="icon" /> Новый файл
+      </div>
+      <div class="context-item" @click="openNewFolderDialog">
+        <img src="@/assets/icons/field.svg" alt="new folder" class="icon" /> Новая папка
+      </div>
       <div v-if="contextMenu.node" class="context-item" @click="openRenameDialog">
-        ✏️ Переименовать
+        <img src="@/assets/icons/rename.svg" alt="rename" class="icon" /> Переименовать
       </div>
       <div
           v-if="contextMenu.node && canDelete(contextMenu.node.name)"
           class="context-item danger"
           @click="deletePath"
       >
-        🗑 Удалить
+        <img src="@/assets/icons/del.svg" alt="delete" class="icon" /> Удалить
       </div>
     </div>
 

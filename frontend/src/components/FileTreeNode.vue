@@ -10,7 +10,9 @@
         {{ isOpen ? '▼' : '▶' }}
       </span>
       <span class="icon">
-        <template v-if="node.type === 'folder'">📁</template>
+        <template v-if="node.type === 'folder'">
+          <img src="@/assets/icons/field.svg" alt="folder" class="icon" />
+        </template>
         <template v-else-if="node.name.endsWith('.tf')">
           <img src="@/assets/icons/terraform.svg" class="file-icon" alt="Terraform" />
         </template>
@@ -20,7 +22,9 @@
         <template v-else-if="node.name.endsWith('.sh')">
           <img src="@/assets/icons/bash.svg" class="file-icon" alt="Bash" />
         </template>
-        <template v-else>📄</template>
+        <template v-else>
+          <img src="@/assets/icons/file.svg" alt="file" class="icon" />
+        </template>
       </span>
       <span class="file-name">{{ node.name }}</span>
     </div>
