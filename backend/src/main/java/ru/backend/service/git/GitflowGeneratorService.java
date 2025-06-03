@@ -174,7 +174,7 @@ public class GitflowGeneratorService {
             sb.append("      continue\n");
             sb.append("    fi\n");
             sb.append("    echo \"→ Запуск Ansible playbook: $f\"\n");
-            sb.append("    ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook \"$f\" -i localhost, -c local --extra-vars \"ansible_become_pass=$ANSIBLE_BECOME_PASS\" || echo \"⚠ Ошибка при запуске $f\"\n");
+            sb.append("    ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook \"$f\" -i localhost, -c local --extra-vars \"ansible_become_pass=$ANSIBLE_BECOME_PASS\" || echo \"Ошибка при запуске $f\"\n");
             sb.append("  done\n");
             sb.append("else\n");
             sb.append("  echo 'Ansible не установлен на сервере'\n");
@@ -190,7 +190,7 @@ public class GitflowGeneratorService {
             sb.append("    continue\n");
             sb.append("  fi\n");
             sb.append("  echo \"→ Запуск bash: $sh_file\"\n");
-            sb.append("  bash \"$sh_file\" || echo \"⚠ Ошибка при выполнении $sh_file\"\n");
+            sb.append("  bash \"$sh_file\" || echo \"Ошибка при выполнении $sh_file\"\n");
             sb.append("done\n\n");
         }
 
