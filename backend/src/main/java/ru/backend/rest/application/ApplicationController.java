@@ -35,7 +35,7 @@ public class ApplicationController {
                 return ResponseEntity.badRequest().body("Имя приложения не может быть пустым");
             }
             applicationService.save(request);
-            return ResponseEntity.status(201).body("Приложение успешно добавлено");
+            return ResponseEntity.status(201).body(request);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body("Неверные данные: " + e.getMessage());
         } catch (Exception e) {

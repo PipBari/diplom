@@ -68,7 +68,9 @@
         <button
             @click="deleteBranch"
             :disabled="!currentBranch || currentBranch === 'main'"
+            style="display: inline-flex; align-items: center; gap: 6px;"
         >
+          <img src="/src/assets/icons/del.svg" alt="Удалить" class="icon" />
           Удалить
         </button>
       </div>

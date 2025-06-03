@@ -81,11 +81,14 @@ const editApp = (app) => {
 
 const saveApp = async (app) => {
   if (editingApp.value) {
-    await api.put(`/applications/${app.name}`, app)
+    const index = applications.value.findIndex(a => a.name === app.name)
+    if (index !== -1) {
+      applications.value[index] = { ...app }
+    }
   } else {
-    await api.post('/applications', app)
+    applications.value.push({ ...app })
   }
-  await loadApps()
+
   closeModal()
 }
 

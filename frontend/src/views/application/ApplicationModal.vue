@@ -132,13 +132,16 @@ const submitApp = async () => {
   }
 
   try {
+    let result
     if (isEdit.value) {
       await api.put(`/applications/${app.name}`, payload)
+      result = payload
     } else {
-      await api.post('/applications', payload)
+      const res = await api.post('/applications', payload)
+      result = res.data
     }
 
-    emit('submit', payload)
+    emit('submit', result)
   } catch (e) {
     alert('Ошибка при сохранении')
   }
