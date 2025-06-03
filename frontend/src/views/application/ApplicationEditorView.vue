@@ -69,7 +69,7 @@
             @click="deleteBranch"
             :disabled="!currentBranch || currentBranch === 'main'"
         >
-          🗑 Удалить
+          Удалить
         </button>
       </div>
 
