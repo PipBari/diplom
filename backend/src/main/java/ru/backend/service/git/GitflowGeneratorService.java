@@ -17,9 +17,7 @@ import ru.backend.util.EncryptionUtils;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
 @Service
@@ -39,10 +37,7 @@ public class GitflowGeneratorService {
         String remoteDir = "/home/" + server.getSpecify_username() + "/apps/" + app.getName();
 
         List<FileNodeDto> files = gitWriterService.listFiles(repo, branch, appPath);
-
         String deployScriptContent = generateDeploySh(app, server, files, repo);
-        String workflowContent = generateDeployYml(app, server);
-        String rollbackScriptContent = generateRollbackSh(app);
 
         gitWriterService.pushFile(
                 repo,
@@ -53,6 +48,7 @@ public class GitflowGeneratorService {
                 "Добавлен автоматический deploy.sh"
         );
 
+        String workflowContent = generateDeployYml(app, server);
         gitWriterService.pushFile(
                 repo,
                 branch,
@@ -62,21 +58,8 @@ public class GitflowGeneratorService {
                 "Добавлен GitHub Actions workflow"
         );
 
-        gitWriterService.pushFile(
-                repo,
-                branch,
-                appPath,
-                "rollback.sh",
-                rollbackScriptContent,
-                "Добавлен автоматический rollback.sh"
-        );
-
         try {
-            Map<String, String> scripts = new HashMap<>();
-            scripts.put("deploy.sh", deployScriptContent);
-            scripts.put("rollback.sh", rollbackScriptContent);
-
-            uploadFilesToServer(remoteDir, server, scripts);
+            uploadDeployScriptToServer(remoteDir, server, deployScriptContent);
             runDeployScriptOverSsh(server, remoteDir);
         } catch (Exception ex) {
             gitWriterService.revertLastCommit(repo, branch);
@@ -206,92 +189,83 @@ public class GitflowGeneratorService {
     private String generateDeployYml(ApplicationDto app, ServersDto server) {
         String remoteDir = "/home/" + server.getSpecify_username() + "/apps/" + app.getName();
         return """
-            name: Deploy %s
+                name: Deploy %s
 
-            on:
-              push:
-                branches:
-                  - %s
-              workflow_dispatch:
-                inputs:
-                  rollback:
-                    description: 'Run rollback script manually'
-                    required: false
-                    default: 'false'
+                on:
+                  push:
+                    branches:
+                      - %s
 
-            jobs:
-              deploy:
-                if: ${{ github.event.inputs.rollback != 'true' }}
-                runs-on: ubuntu-22.04
-                env:
-                  GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
-                  GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
-                  ANSIBLE_BECOME_PASS: ${{ secrets.SERVER_PASSWORD }}
-                steps:
-                  - name: Checkout
-                    uses: actions/checkout@v3
+                jobs:
+                  deploy:
+                    runs-on: ubuntu-22.04
+                    env:
+                      GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
+                      GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+                      ANSIBLE_BECOME_PASS: ${{ secrets.SERVER_PASSWORD }}
+                    steps:
+                      - name: Checkout
+                        uses: actions/checkout@v3
 
-                  - name: SSH Deploy
-                    id: deploy_step
-                    uses: appleboy/ssh-action@master
-                    with:
-                      host: %s
-                      username: %s
-                      password: ${{ secrets.SERVER_PASSWORD }}
-                      envs: GIT_USERNAME,GIT_TOKEN,ANSIBLE_BECOME_PASS
-                      script: |
-                        cd %s
-                        bash ./deploy.sh
-
-              rollback:
-                if: ${{ failure() && github.event.inputs.rollback != 'true' }}
-                needs: deploy
-                runs-on: ubuntu-22.04
-                env:
-                  GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
-                  GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
-                steps:
-                  - name: Checkout
-                    uses: actions/checkout@v3
-
-                  - name: SSH Rollback
-                    uses: appleboy/ssh-action@master
-                    with:
-                      host: %s
-                      username: %s
-                      password: ${{ secrets.SERVER_PASSWORD }}
-                      envs: GIT_USERNAME,GIT_TOKEN
-                      script: |
-                        cd %s
-                        bash ./rollback.sh
-            """.formatted(
+                      - name: SSH Deploy
+                        uses: appleboy/ssh-action@master
+                        with:
+                          host: %s
+                          username: %s
+                          password: ${{ secrets.SERVER_PASSWORD }}
+                          envs: GIT_USERNAME,GIT_TOKEN,ANSIBLE_BECOME_PASS
+                          script: |
+                            cd %s
+                            bash ./deploy.sh
+                """.formatted(
                 app.getName(),
                 app.getBranch(),
-                server.getHost(),
-                server.getSpecify_username(),
-                remoteDir,
                 server.getHost(),
                 server.getSpecify_username(),
                 remoteDir
         );
     }
 
-    private String generateRollbackSh(ApplicationDto app) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("#!/bin/bash\n");
-        sb.append("set -e\n\n");
-        sb.append("echo \"Начинается откат приложения %s...\"\n".formatted(app.getName()));
-        sb.append("echo \"→ Terraform destroy (если есть)\"\n");
-        sb.append("if command -v terraform >/dev/null 2>&1; then\n");
-        sb.append("  find . -type f -name \"*.tf\" | while read tf_file; do\n");
-        sb.append("    dir=$(dirname \"$tf_file\")\n");
-        sb.append("    (cd \"$dir\" && terraform destroy -auto-approve || true)\n");
-        sb.append("  done\n");
-        sb.append("fi\n\n");
-        sb.append("echo \"→ Git reset\"\n");
-        sb.append("git reset --hard HEAD~1 || true\n");
-        sb.append("echo \"Откат завершён\"\n");
-        return sb.toString();
+    private void uploadDeployScriptToServer(String remoteDir, ServersDto server, String scriptContent) {
+        try {
+            JSch jsch = new JSch();
+            Session session = jsch.getSession(server.getSpecify_username(), server.getHost(), server.getPort());
+            session.setPassword(EncryptionUtils.decrypt(server.getPassword()));
+
+            Properties config = new Properties();
+            config.put("StrictHostKeyChecking", "no");
+            session.setConfig(config);
+            session.connect(10000);
+
+            executeCommand(session, "mkdir -p " + remoteDir);
+
+            String remoteScriptPath = remoteDir + "/deploy.sh";
+            String command = "cat > " + remoteScriptPath + " && chmod +x " + remoteScriptPath;
+
+            ChannelExec channel = (ChannelExec) session.openChannel("exec");
+            channel.setCommand(command);
+            channel.setInputStream(null);
+            channel.setErrStream(System.err);
+            OutputStream out = channel.getOutputStream();
+            channel.connect();
+
+            out.write(scriptContent.getBytes(StandardCharsets.UTF_8));
+            out.flush();
+            out.close();
+
+            while (!channel.isClosed()) {
+                Thread.sleep(100);
+            }
+
+            if (channel.getExitStatus() != 0) {
+                throw new RuntimeException("Ошибка выполнения команды для deploy.sh");
+            }
+
+            channel.disconnect();
+            session.disconnect();
+        } catch (Exception e) {
+            throw new RuntimeException("Ошибка при отправке deploy.sh на сервер: " + e.getMessage(), e);
+        }
     }
 
     private void executeCommand(Session session, String command) throws Exception {
@@ -338,52 +312,5 @@ public class GitflowGeneratorService {
                 .orElseThrow(() -> new IllegalArgumentException("Сервер не найден: " + app.getServerName()));
 
         this.generate(app, server, repo);
-    }
-
-    private void uploadFilesToServer(String remoteDir, ServersDto server, Map<String, String> files) {
-        try {
-            JSch jsch = new JSch();
-            Session session = jsch.getSession(server.getSpecify_username(), server.getHost(), server.getPort());
-            session.setPassword(EncryptionUtils.decrypt(server.getPassword()));
-
-            Properties config = new Properties();
-            config.put("StrictHostKeyChecking", "no");
-            session.setConfig(config);
-            session.connect(10000);
-
-            executeCommand(session, "mkdir -p " + remoteDir);
-
-            for (Map.Entry<String, String> entry : files.entrySet()) {
-                String filename = entry.getKey();
-                String content = entry.getValue();
-                String remotePath = remoteDir + "/" + filename;
-                String command = "cat > " + remotePath + " && chmod +x " + remotePath;
-
-                ChannelExec channel = (ChannelExec) session.openChannel("exec");
-                channel.setCommand(command);
-                channel.setInputStream(null);
-                channel.setErrStream(System.err);
-                OutputStream out = channel.getOutputStream();
-                channel.connect();
-
-                out.write(content.getBytes(StandardCharsets.UTF_8));
-                out.flush();
-                out.close();
-
-                while (!channel.isClosed()) {
-                    Thread.sleep(100);
-                }
-
-                if (channel.getExitStatus() != 0) {
-                    throw new RuntimeException("Ошибка при загрузке " + filename);
-                }
-
-                channel.disconnect();
-            }
-
-            session.disconnect();
-        } catch (Exception e) {
-            throw new RuntimeException("Ошибка при загрузке файлов на сервер: " + e.getMessage(), e);
-        }
     }
 }
